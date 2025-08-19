@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" href="logo.png">
+<title>Basis Data & Inventaris</title>
+<style>
+    :root {
+        --primary: #00bcd4;
+        --primary-dark: #0097a7;
+        --danger: #f44336;
+        --danger-dark: #d32f2f;
+        --bg-light: #f9f9f9;
+        --text-dark: #333;
+        --border-radius: 8px;
+    }
+
+    body {
+        font-family: 'Segoe UI', Arial, sans-serif;
+        background: var(--bg-light);
+        color: var(--text-dark);
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+    }
+
+    .container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+        max-width: 600px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    h1 {
+        color: var(--primary-dark);
+        margin-bottom: 15px;
+        text-align: center;
+    }
+
+    h2 {
+        margin-top: 20px;
+        margin-bottom: 10px;
+        color: var(--primary);
+        text-align: center;
+    }
+
+    button, input, select {
+        padding: 10px;
+        border-radius: var(--border-radius);
+        border: 1px solid #ccc;
+        font-size: 14px;
+        outline: none;
+        transition: all 0.2s ease-in-out;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    button {
+        background: var(--primary);
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-weight: 500;
+    }
+
+    button:hover {
+        background: var(--primary-dark);
+    }
+
+    .danger {
+        background: var(--danger);
+    }
+
+    .danger:hover {
+        background: var(--danger-dark);
+    }
+
+    section {
+        background: white;
+        padding: 20px;
+        border-radius: var(--border-radius);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+        width: 100%;
+    }
+
+    label {
+        display: block;
+        margin-top: 10px;
+        font-weight: 500;
+    }
+
+    input[type="file"] {
+        border: none;
+        background: transparent;
+    }
+
+    hr {
+        border: none;
+        border-top: 1px solid #ddd;
+        margin: 30px 0;
+    }
+
+    .back-btn {
+        background: transparent;
+        border: 1px solid var(--primary);
+        color: var(--primary);
+        margin-bottom: 20px;
+        width: auto;
+        padding: 10px 20px;
+    }
+
+    .back-btn:hover {
+        background: var(--primary);
+        color: white;
+    }
+
+    /* Agar tetap rapi di layar kecil */
+    @media (max-width: 600px) {
+        section {
+            padding: 15px;
+        }
+    }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Input Data Pengunjung</h1>
+    <button class="back-btn" onclick="window.location.href='index.html'">← Kembali ke Daftar</button>
+
+    <section>
+        <h2>Tambah Tahun</h2>
+        <input type="text" id="tahun-baru" placeholder="Masukkan tahun...">
+        <button onclick="tambahTahun()">Tambah Tahun</button>
+    </section>
+
+    <section>
+        <h2>Upload Excel Data Pengunjung</h2>
+        <label for="tahun-tujuan">Tahun Tujuan:</label>
+        <select id="tahun-tujuan"></select>
+
+        <label for="bulan-tujuan">Bulan Tujuan:</label>
+        <select id="bulan-tujuan">
+            <option>Januari</option>
+            <option>Februari</option>
+            <option>Maret</option>
+            <option>April</option>
+            <option>Mei</option>
+            <option>Juni</option>
+            <option>Juli</option>
+            <option>Agustus</option>
+            <option>September</option>
+            <option>Oktober</option>
+            <option>November</option>
+            <option>Desember</option>
+        </select>
+
+        <label for="file-excel">Pilih File Excel:</label>
+        <input type="file" id="file-excel" accept=".xls,.xlsx">
+
+        <button onclick="uploadExcel()">Upload & Simpan</button>
+    </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, set, push, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyC8DOLvUXXqfpguhs7j3_Ex6NhBVHk60i8",
+        authDomain: "datapengunjung-e80b8.firebaseapp.com",
+        projectId: "datapengunjung-e80b8",
+        storageBucket: "datapengunjung-e80b8.firebasestorage.app",
+        messagingSenderId: "793849975208",
+        appId: "1:793849975208:web:5f046eb7d153cf16378d9d",
+        databaseURL: "https://datapengunjung-e80b8-default-rtdb.firebaseio.com/"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    async function loadTahun() {
+        const tahunSelect = document.getElementById('tahun-tujuan');
+        tahunSelect.innerHTML = '';
+        const snapshot = await get(ref(db, 'tahun'));
+        if (snapshot.exists()) {
+            const tahunData = snapshot.val();
+            Object.keys(tahunData).sort().forEach(tahun => {
+                const opt = document.createElement('option');
+                opt.value = tahun;
+                opt.textContent = tahun;
+                tahunSelect.appendChild(opt);
+            });
+        }
+    }
+    loadTahun();
+
+    window.tambahTahun = function() {
+        const tahun = document.getElementById('tahun-baru').value.trim();
+        if (!tahun) return alert("Tahun tidak boleh kosong!");
+        set(ref(db, `tahun/${tahun}`), true)
+            .then(() => {
+                alert(`Tahun ${tahun} berhasil ditambahkan!`);
+                document.getElementById('tahun-baru').value = '';
+                loadTahun();
+            })
+            .catch(err => alert("Error: " + err));
+    };
+
+    window.uploadExcel = function() {
+        const tahunTujuan = document.getElementById('tahun-tujuan').value;
+        const bulanTujuan = document.getElementById('bulan-tujuan').value;
+        if (!tahunTujuan || !bulanTujuan) return alert("Pilih tahun dan bulan tujuan!");
+
+        const file = document.getElementById('file-excel').files[0];
+        if (!file) return alert("Pilih file Excel terlebih dahulu!");
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(sheet);
+
+            if (!json.length) return alert("File Excel kosong!");
+
+            json.forEach(row => {
+                let tgl = row.Tanggal || '';
+                if (typeof tgl === 'number') {
+                    tgl = XLSX.SSF.format("dd/mm/yyyy", tgl);
+                } else if (typeof tgl === 'string') {
+                    tgl = tgl.split(' ')[0];
+                }
+
+                const dataPengunjung = {
+                    tanggal: tgl,
+                    nama: row.Nama || '',
+                    blok: row.Blok || '',
+                    jenjang: row.Jenjang || '',
+                    judulBuku: row["Judul Buku"] || '',
+                    kategori: row.Kategori || '',
+                    keterangan: row.Keterangan || ''
+                };
+
+                set(ref(db, `tahun/${tahunTujuan}`), true);
+
+                const newRef = push(ref(db, `pengunjung/${tahunTujuan}/${bulanTujuan}`));
+                set(newRef, dataPengunjung);
+            });
+
+            alert("Data berhasil diunggah ke Firebase!");
+            document.getElementById('file-excel').value = '';
+        };
+
+        reader.readAsArrayBuffer(file);
+    };
+</script>
+
+</body>
+</html>

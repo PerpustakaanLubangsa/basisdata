@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="logo.png">
+    <title>Basis Data & Inventaris</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="module">
+        // Import langsung modul yang dibutuhkan dari CDN Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+
+        // Konfigurasi Firebase Anda
+        const firebaseConfig = {
+            apiKey: "AIzaSyC8DOLvUXXqfpguhs7j3_Ex6NhBVHk60i8",
+            authDomain: "datapengunjung-e80b8.firebaseapp.com",
+            projectId: "datapengunjung-e80b8",
+            storageBucket: "datapengunjung-e80b8.firebasestorage.app",
+            messagingSenderId: "793849975208",
+            appId: "1:793849975208:web:5f046eb7d153cf16378d9d",
+            databaseURL: "https://datapengunjung-e80b8-default-rtdb.firebaseio.com/"
+        };
+
+        // Inisialisasi Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // Ambil elemen-elemen DOM
+        const tahunList = document.getElementById('tahun-list');
+        const bulanList = document.getElementById('bulan-list');
+        const pengunjungTable = document.getElementById('pengunjung-table');
+        const loadingOverlay = document.getElementById('loading-overlay');
+
+        // Kontrol header (tombol-tombol)
+        const btnBack = document.getElementById('btn-back');
+        const btnPerTahun = document.getElementById('btn-perbandingan-tahun');
+        const btnPivotTahun = document.getElementById('btn-pivot-tahun');
+        const btnPerBulan = document.getElementById('btn-perbandingan');
+        const btnPivotBulan = document.getElementById('btn-pivot-bulan');
+        const btnPivot = document.getElementById('btn-pivot');
+        const btnChart = document.getElementById('btn-chart');
+        const btnHapus = document.getElementById('btn-hapus');
+        const judulHeader = document.getElementById('judul-header');
+
+        // Tombol-tombol navigasi pivot baru
+        const btnPivotJenjang = document.getElementById('btn-pivot-jenjang');
+        const btnPivotKeterangan = document.getElementById('btn-pivot-keterangan');
+        const btnPivotKategori = document.getElementById('btn-pivot-kategori');
+        const btnPivotNama = document.getElementById('btn-pivot-nama');
+        const btnPivotBuku = document.getElementById('btn-pivot-buku');
+
+        // Variabel untuk menyimpan tahun dan bulan yang sedang aktif
+        let currentTahun = null;
+        let currentBulan = null;
+
+        /**
+         * Menampilkan overlay loading.
+         */
+        function showLoading() {
+            loadingOverlay.style.display = 'flex';
+        }
+
+        /**
+         * Menyembunyikan overlay loading.
+         */
+        function hideLoading() {
+            loadingOverlay.style.display = 'none';
+        }
+
+        /**
+         * Helper function untuk mengubah string menjadi Title Case.
+         * Setiap kata akan diawali dengan huruf kapital.
+         * @param {string} str - String input.
+         * @returns {string} String dalam Title Case.
+         */
+        function toTitleCase(str) {
+            if (typeof str !== 'string' || !str.trim()) {
+                return '';
+            }
+            return str.toLowerCase().split(' ').map(word => {
+                if (word.length === 0) return '';
+                return word.charAt(0).toUpperCase() + word.slice(1);
+            }).join(' ');
+        }
+
+        /**
+         * Fungsi untuk menormalisasi nilai input berdasarkan jenis data.
+         * Ini akan mengubah input yang "mirip" menjadi nilai standar yang ditentukan.
+         * @param {string} fieldName - Nama bidang (e.g., 'jenjang', 'keterangan', 'kategori', 'nama', 'judulBuku').
+         * @param {string} inputValue - Nilai input mentah.
+         * @returns {string} Nilai yang sudah dinormalisasi.
+         */
+        function normalizeInputValue(fieldName, inputValue) {
+            if (typeof inputValue !== 'string' || !inputValue.trim()) {
+                return '';
+            }
+            const lowerInput = inputValue.toLowerCase().trim();
+
+            switch (fieldName) {
+                case 'jenjang':
+                    if (lowerInput.includes('sltp') || lowerInput.includes('smp')) return 'SLTP';
+                    if (lowerInput.includes('slta') || lowerInput.includes('sma')) return 'SLTA';
+                    if (lowerInput.includes('pt') || lowerInput.includes('kuliah') || lowerInput.includes('perguruan tinggi')) return 'PT';
+                    return inputValue;
+                case 'keterangan':
+                    if (lowerInput.includes('baca') || lowerInput.includes('membaca')) return 'Baca';
+                    if (lowerInput.includes('pinjam') || lowerInput.includes('meminjam')) return 'Pinjam';
+                    return inputValue;
+                case 'kategori':
+                    const allowedCategoriesMap = {
+                        'sejarah dan geografi': 'Sejarah dan Geografi',
+                        'kesusastraan': 'Kesusastraan',
+                        'komik': 'Komik',
+                        'agama': 'Agama',
+                        'filsafat dan psikologi': 'Filsafat dan Psikologi',
+                        'ilmu murni': 'Ilmu Murni',
+                        'ilmu sosial': 'Ilmu Sosial',
+                        'ilmu bahasa': 'Ilmu Bahasa',
+                        'berita': 'Berita',
+                        'karya umum': 'Karya Umum',
+                        'majalah': 'Majalah'
+                    };
+
+                    if (lowerInput.includes('koran')) return 'Berita';
+                    
+                    if (lowerInput.includes('sejarah') && lowerInput.includes('geografi')) return 'Sejarah dan Geografi';
+                    if (lowerInput.includes('sastra') || lowerInput.includes('kesusastraan')) return 'Kesusastraan';
+                    if (lowerInput.includes('filsafat') && (lowerInput.includes('psikolog') || lowerInput.includes('psikologi'))) return 'Filsafat dan Psikologi';
+                    if (lowerInput.includes('ilmu murni') || lowerInput.includes('sains')) return 'Ilmu Murni';
+                    if (lowerInput.includes('ilmu sosial')) return 'Ilmu Sosial';
+                    if (lowerInput.includes('ilmu bahasa')) return 'Ilmu Bahasa';
+                    if (lowerInput.includes('karya umum') || lowerInput.includes('umum')) return 'Karya Umum';
+
+                    if (allowedCategoriesMap[lowerInput]) {
+                        return allowedCategoriesMap[lowerInput];
+                    }
+                    return '';
+                case 'nama':
+                    return toTitleCase(inputValue);
+                case 'judulBuku':
+                    if (lowerInput.includes('detektif conan')) return 'Detektif Conan';
+                    if (lowerInput.includes('conan')) return 'Detektif Conan';
+                    if (lowerInput.includes('koran')) return 'Koran';
+
+                    return toTitleCase(inputValue);
+                default:
+                    return inputValue;
+            }
+        }
+
+        /**
+         * Menampilkan section tertentu dan mengatur visibilitas tombol header sesuai konteks.
+         * @param {string} sectionId - ID dari section yang akan ditampilkan.
+         */
+        function showSection(sectionId) {
+            ['tahun-section', 'bulan-section', 'pengunjung-section', 'pivot-section']
+                .forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        element.style.display = 'none';
+                    }
+                });
+            
+            const targetSection = document.getElementById(sectionId);
+            if (targetSection) {
+                targetSection.style.display = 'block';
+            }
+
+            [btnBack, btnPerTahun, btnPivotTahun, btnPerBulan, btnPivotBulan, btnPivot, btnChart, btnHapus,
+            btnPivotJenjang, btnPivotKeterangan, btnPivotKategori, btnPivotNama, btnPivotBuku].forEach(b => b.style.display = 'none');
+
+            if (sectionId === 'tahun-section') {
+                btnPerTahun.style.display = 'inline-block';
+                btnPivotTahun.style.display = 'inline-block';
+                btnBack.onclick = null;
+                judulHeader.textContent = 'Data Daftar Pengunjung Perpustakaan Lubangsa';
+            } else if (sectionId === 'bulan-section') {
+                btnBack.style.display = 'inline-block';
+                btnBack.onclick = () => showTahun();
+                btnPerBulan.style.display = 'inline-block';
+                btnPivotBulan.style.display = 'inline-block';
+                judulHeader.textContent = `Tahun ${currentTahun} • Pilih Bulan`;
+            } else if (sectionId === 'pengunjung-section') {
+                btnBack.style.display = 'inline-block';
+                btnBack.onclick = () => showBulan(currentTahun);
+                btnPivot.style.display = 'inline-block';
+                btnChart.style.display = 'inline-block';
+                btnHapus.style.display = 'inline-block';
+                judulHeader.textContent = `Pengunjung • ${currentBulan} ${currentTahun}`;
+            } else if (sectionId === 'pivot-section') {
+                if (currentTahun && currentBulan) {
+                    btnBack.style.display = 'inline-block';
+                    btnBack.onclick = () => showPengunjung(currentTahun, currentBulan);
+                    btnChart.style.display = 'inline-block';
+                    judulHeader.textContent = `Pivot • ${currentBulan} ${currentTahun}`;
+                } else if (currentTahun) {
+                    btnBack.style.display = 'inline-block';
+                    btnBack.onclick = () => showBulan(currentTahun);
+                    btnPerBulan.style.display = 'inline-block';
+                    judulHeader.textContent = `Pivot Bulanan • ${currentTahun}`;
+                } else {
+                    btnBack.style.display = 'inline-block';
+                    btnBack.onclick = () => showTahun();
+                    btnPerTahun.style.display = 'inline-block';
+                    judulHeader.textContent = `Pivot Tahunan`;
+                }
+                btnPivotJenjang.style.display = 'inline-block';
+                btnPivotKeterangan.style.display = 'inline-block';
+                btnPivotKategori.style.display = 'inline-block';
+                btnPivotNama.style.display = 'inline-block';
+                btnPivotBuku.style.display = 'inline-block';
+            }
+        }
+
+        /**
+         * Fungsi untuk menggulir halaman ke section tertentu.
+         * @param {string} sectionId - ID dari section yang akan digulir.
+         */
+        function scrollToSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        /**
+         * Menampilkan daftar tahun yang tersedia.
+         */
+        function showTahun() {
+            showLoading();
+            tahunList.innerHTML = '';
+            // Gunakan requestAnimationFrame untuk memastikan loading overlay telah dirender
+            requestAnimationFrame(() => {
+                onValue(ref(db, "pengunjung"), (snapshot) => {
+                    tahunList.innerHTML = '';
+                    if (!snapshot.exists()) {
+                        const emptyState = document.createElement('p');
+                        emptyState.textContent = "Belum ada data pengunjung yang tercatat.";
+                        emptyState.style.textAlign = 'center';
+                        emptyState.style.marginTop = '20px';
+                        tahunList.appendChild(emptyState);
+                    } else {
+                        snapshot.forEach(childSnap => {
+                            const tahun = childSnap.key;
+                            const card = document.createElement('div');
+                            card.className = "year-card";
+                            card.textContent = tahun;
+                            card.onclick = () => showBulan(tahun);
+                            const btnX = document.createElement('button');
+                            btnX.className = "btn-x";
+                            btnX.textContent = "x";
+                            btnX.title = "Hapus Tahun";
+                            btnX.onclick = (e) => {
+                                e.stopPropagation();
+                                hapusTahun(tahun);
+                            };
+                            card.appendChild(btnX);
+                            tahunList.appendChild(card);
+                        });
+                    }
+                    hideLoading();
+                    showSection('tahun-section');
+                    currentTahun = null;
+                    currentBulan = null;
+                });
+            });
+        }
+
+        /**
+         * Menampilkan daftar bulan untuk tahun yang dipilih.
+         * @param {string} tahun - Tahun yang dipilih.
+         */
+        function showBulan(tahun) {
+            showLoading();
+            currentTahun = tahun;
+            currentBulan = null;
+            bulanList.innerHTML = '';
+            requestAnimationFrame(() => {
+                onValue(ref(db, `pengunjung/${tahun}`), (snapshot) => {
+                    bulanList.innerHTML = '';
+                    if (!snapshot.exists()) {
+                        const emptyState = document.createElement('p');
+                        emptyState.textContent = "Tidak ada data pengunjung untuk tahun ini.";
+                        emptyState.style.textAlign = 'center';
+                        emptyState.style.marginTop = '20px';
+                        bulanList.appendChild(emptyState);
+                    } else {
+                        snapshot.forEach(childSnap => {
+                            const bulan = childSnap.key;
+                            const card = document.createElement('div');
+                            card.className = "month-card";
+                            card.textContent = bulan;
+                            card.onclick = () => showPengunjung(tahun, bulan);
+                            bulanList.appendChild(card);
+                        });
+                    }
+                    hideLoading();
+                    showSection('bulan-section');
+                });
+            });
+        }
+
+        /**
+         * Menampilkan daftar pengunjung untuk bulan dan tahun yang dipilih dalam bentuk tabel.
+         * @param {string} tahun - Tahun dari data pengunjung.
+         * @param {string} bulan - Bulan dari data pengunjung.
+         */
+        function showPengunjung(tahun, bulan) {
+            showLoading();
+            currentTahun = tahun;
+            currentBulan = bulan;
+            pengunjungTable.innerHTML = '';
+            document.getElementById("judul-pengunjung").textContent = `Daftar Pengunjung - ${bulan} ${tahun}`;
+            const pengunjungRef = ref(db, `pengunjung/${tahun}/${bulan}`);
+            requestAnimationFrame(() => {
+                onValue(pengunjungRef, (snapshot) => {
+                    pengunjungTable.innerHTML = '';
+                    let nomor = 1;
+                    snapshot.forEach(childSnap => {
+                        const data = childSnap.val();
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${nomor++}</td>
+                            <td>${data.tanggal || ''}</td>
+                            <td>${normalizeInputValue('nama', data.nama)}</td>
+                            <td>${data.blok || ''}</td>
+                            <td>${normalizeInputValue('jenjang', data.jenjang)}</td>
+                            <td>${normalizeInputValue('judulBuku', data.judulBuku)}</td>
+                            <td>${normalizeInputValue('kategori', data.kategori)}</td>
+                            <td>${normalizeInputValue('keterangan', data.keterangan)}</td>
+                        `;
+                        pengunjungTable.appendChild(tr);
+                    });
+                    hideLoading();
+                    showSection('pengunjung-section');
+                });
+            });
+        }
+
+        /**
+         * Menampilkan data rekap (pivot) untuk bulan dan tahun yang dipilih.
+         */
+        function showPivot() {
+            if (!currentTahun || !currentBulan) return;
+            showLoading();
+            document.getElementById("judul-pivot").textContent = `Rekap Data Pengunjung - ${currentBulan} ${currentTahun}`;
+            
+            const rekapJenjang = {}, rekapKeterangan = {}, rekapKategori = {}, rekapNama = {}, rekapBuku = {};
+            const pengunjungRef = ref(db, `pengunjung/${currentTahun}/${currentBulan}`);
+            requestAnimationFrame(() => {
+                onValue(pengunjungRef, (snapshot) => {
+                    snapshot.forEach(childSnap => {
+                        const data = childSnap.val();
+                        const normalizedJenjang = normalizeInputValue('jenjang', data.jenjang);
+                        const normalizedKeterangan = normalizeInputValue('keterangan', data.keterangan);
+                        const normalizedKategori = normalizeInputValue('kategori', data.kategori);
+                        const normalizedNama = normalizeInputValue('nama', data.nama);
+                        const normalizedJudulBuku = normalizeInputValue('judulBuku', data.judulBuku);
+                        if (normalizedJenjang) rekapJenjang[normalizedJenjang] = (rekapJenjang[normalizedJenjang] || 0) + 1;
+                        if (normalizedKeterangan) rekapKeterangan[normalizedKeterangan] = (rekapKeterangan[normalizedKeterangan] || 0) + 1;
+                        if (normalizedKategori) rekapKategori[normalizedKategori] = (rekapKategori[normalizedKategori] || 0) + 1;
+                        if (normalizedNama) rekapNama[normalizedNama] = (rekapNama[normalizedNama] || 0) + 1;
+                        if (normalizedJudulBuku) rekapBuku[normalizedJudulBuku] = (rekapBuku[normalizedJudulBuku] || 0) + 1;
+                    });
+                    renderTable("rekap-jenjang", rekapJenjang);
+                    renderTable("rekap-keterangan", rekapKeterangan);
+                    renderTable("rekap-kategori", rekapKategori);
+                    renderTable("rekap-nama", rekapNama);
+                    renderTable("rekap-buku", rekapBuku);
+                    hideLoading();
+                    showSection('pivot-section');
+                }, { onlyOnce: true });
+            });
+        }
+
+        /**
+         * Menampilkan sidebar chart dengan grafik rekapitulasi untuk bulan dan tahun yang dipilih.
+         */
+        function showChart() {
+            if (!currentTahun || !currentBulan) return;
+            showLoading();
+            document.getElementById("judul-chart").textContent = `Diagram & Grafik - ${currentBulan} ${currentTahun}`;
+            document.getElementById("chart-sidebar").classList.add("active");
+            const pengunjungRef = ref(db, `pengunjung/${currentTahun}/${currentBulan}`);
+            requestAnimationFrame(() => {
+                onValue(pengunjungRef, (snapshot) => {
+                    const rekapJenjang = {}, rekapKeterangan = {}, rekapKategori = {};
+                    snapshot.forEach(childSnap => {
+                        const data = childSnap.val();
+                        const normalizedJenjang = normalizeInputValue('jenjang', data.jenjang);
+                        const normalizedKeterangan = normalizeInputValue('keterangan', data.keterangan);
+                        const normalizedKategori = normalizeInputValue('kategori', data.kategori);
+                        if (normalizedJenjang) rekapJenjang[normalizedJenjang] = (rekapJenjang[normalizedJenjang] || 0) + 1;
+                        if (normalizedKeterangan) rekapKeterangan[normalizedKeterangan] = (rekapKeterangan[normalizedKeterangan] || 0) + 1;
+                        if (normalizedKategori) rekapKategori[normalizedKategori] = (rekapKategori[normalizedKategori] || 0) + 1;
+                    });
+                    const sortObj = (obj) => Object.fromEntries(Object.entries(obj).sort((a, b) => b[1] - a[1]));
+                    buatChart("chartJenjang", "Rekap Jenjang Pendidikan", sortObj(rekapJenjang), "bar");
+                    buatChart("chartKeterangan", "Rekap Keterangan", sortObj(rekapKeterangan), "bar");
+                    buatChart("chartKategori", "Rekap Kategori", sortObj(rekapKategori), "bar");
+                    Chart.getChart("chartPerbandinganSidebar")?.destroy();
+                    hideLoading();
+                }, { onlyOnce: true });
+            });
+        }
+
+        /**
+         * Menutup sidebar chart.
+         */
+        window.closeChartSidebar = () => {
+            document.getElementById("chart-sidebar").classList.remove("active");
+        };
+
+        /**
+         * Menampilkan grafik perbandingan jumlah pengunjung antar bulan untuk tahun yang sedang dipilih.
+         */
+        function showPerbandingan() {
+            if (!currentTahun) {
+                alert("Pilih tahun terlebih dahulu.");
+                return;
+            }
+            showLoading();
+            document.getElementById("judul-chart").textContent = `Grafik Bulanan - ${currentTahun}`;
+            document.getElementById("chart-sidebar").classList.add("active");
+            const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+            const yearRef = ref(db, `pengunjung/${currentTahun}`);
+            requestAnimationFrame(() => {
+                onValue(yearRef, (snapshot) => {
+                    const counts = months.map(m => {
+                        const child = snapshot.child(m);
+                        return child.exists() ? Object.keys(child.val()).length : 0;
+                    });
+                    const rekapJenjang = {}, rekapKeterangan = {}, rekapKategori = {};
+                    snapshot.forEach(bulanSnap => {
+                        bulanSnap.forEach(dataSnap => {
+                            const data = dataSnap.val();
+                            const normalizedJenjang = normalizeInputValue('jenjang', data.jenjang);
+                            const normalizedKeterangan = normalizeInputValue('keterangan', data.keterangan);
+                            const normalizedKategori = normalizeInputValue('kategori', data.kategori);
+                            if (normalizedJenjang) rekapJenjang[normalizedJenjang] = (rekapJenjang[normalizedJenjang] || 0) + 1;
+                            if (normalizedKeterangan) rekapKeterangan[normalizedKeterangan] = (rekapKeterangan[normalizedKeterangan] || 0) + 1;
+                            if (normalizedKategori) rekapKategori[normalizedKategori] = (rekapKategori[normalizedKategori] || 0) + 1;
+                        });
+                    });
+                    const sortObj = (obj) => Object.fromEntries(Object.entries(obj).sort((a, b) => b[1] - a[1]));
+                    buatChart("chartPerbandinganSidebar", "Jumlah Pengunjung per Bulan", Object.fromEntries(months.map((m, i) => [m, counts[i]])), "line");
+                    buatChart("chartJenjang", "Rekap Jenjang Pendidikan", sortObj(rekapJenjang), "bar");
+                    buatChart("chartKeterangan", "Rekap Keterangan", sortObj(rekapKeterangan), "bar");
+                    buatChart("chartKategori", "Rekap Kategori", sortObj(rekapKategori), "bar");
+                    hideLoading();
+                }, { onlyOnce: true });
+            });
+        }
+
+        /**
+         * Menampilkan grafik perbandingan jumlah pengunjung antar tahun.
+         */
+        function showPerbandinganTahun() {
+            showLoading();
+            document.getElementById("judul-chart").textContent = `Grafik Tahunan Keseluruhan`;
+            document.getElementById("chart-sidebar").classList.add("active");
+            const pengunjungRef = ref(db, "pengunjung");
+            requestAnimationFrame(() => {
+                onValue(pengunjungRef, (snapshot) => {
+                    const tahunArr = [], counts = [], rekapJenjang = {}, rekapKeterangan = {}, rekapKategori = {};
+                    snapshot.forEach(childSnap => {
+                        const tahun = childSnap.key;
+                        let total = 0;
+                        childSnap.forEach(bulanSnap => {
+                            const bulanVal = bulanSnap.val() || {};
+                            total += Object.keys(bulanVal).length;
+                            Object.values(bulanVal).forEach(data => {
+                                if (!data) return;
+                                const normalizedJenjang = normalizeInputValue('jenjang', data.jenjang);
+                                const normalizedKeterangan = normalizeInputValue('keterangan', data.keterangan);
+                                const normalizedKategori = normalizeInputValue('kategori', data.kategori);
+                                if (normalizedJenjang) rekapJenjang[normalizedJenjang] = (rekapJenjang[normalizedJenjang] || 0) + 1;
+                                if (normalizedKeterangan) rekapKeterangan[normalizedKeterangan] = (rekapKeterangan[normalizedKeterangan] || 0) + 1;
+                                if (normalizedKategori) rekapKategori[normalizedKategori] = (rekapKategori[normalizedKategori] || 0) + 1;
+                            });
+                        });
+                        tahunArr.push(tahun);
+                        counts.push(total);
+                    });
+                    const sortObj = (obj) => Object.fromEntries(Object.entries(obj).sort((a, b) => b[1] - a[1]));
+                    buatChart("chartPerbandinganSidebar", "Jumlah Pengunjung per Tahun", Object.fromEntries(tahunArr.map((t, i) => [t, counts[i]])), "line");
+                    buatChart("chartJenjang", "Rekap Jenjang Pendidikan", sortObj(rekapJenjang), "bar");
+                    buatChart("chartKeterangan", "Rekap Keterangan", sortObj(rekapKeterangan), "bar");
+                    buatChart("chartKategori", "Rekap Kategori", sortObj(rekapKategori), "bar");
+                    hideLoading();
+                }, { onlyOnce: true });
+            });
+        }
+
+        /**
+         * Helper function untuk merender data ke dalam tabel HTML.
+         */
+        function renderTable(elementId, dataObj) {
+            const table = document.getElementById(elementId);
+            table.innerHTML = "<tr><th>Item</th><th>Jumlah</th></tr>";
+            const sorted = Object.entries(dataObj).sort((a, b) => b[1] - a[1]);
+            let total = 0;
+            sorted.forEach(([key, val]) => {
+                table.innerHTML += `<tr><td>${escapeHtml(key)}</td><td class="num">${val}</td></tr>`;
+                total += val;
+            });
+            table.innerHTML += `<tr><th>Total</th><th class="num">${total}</th></tr>`;
+        }
+
+        /**
+         * Helper function untuk mengamankan string dari karakter HTML khusus.
+         */
+        function escapeHtml(unsafe) {
+            if (unsafe === null || unsafe === undefined) return '';
+            return String(unsafe)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        /**
+         * Helper function untuk membuat dan menampilkan chart menggunakan Chart.js.
+         */
+        function buatChart(canvasId, label, dataObj, tipe = "bar") {
+            const ctx = document.getElementById(canvasId)?.getContext("2d");
+            if (!ctx) {
+                console.warn(`Canvas dengan ID '${canvasId}' tidak ditemukan.`);
+                return;
+            }
+            const existingChart = Chart.getChart(canvasId);
+            if (existingChart) existingChart.destroy();
+            new Chart(ctx, {
+                type: tipe,
+                data: {
+                    labels: Object.keys(dataObj),
+                    datasets: [{
+                        label: label,
+                        data: Object.values(dataObj),
+                        backgroundColor: "rgba(0,188,212,0.5)",
+                        borderColor: "rgba(0,188,212,1)",
+                        borderWidth: 1,
+                        tension: (tipe === "line" ? 0.25 : 0),
+                        pointRadius: (tipe === "line" ? 3 : 0)
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: true, position: "top" } },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+                    layout: { padding: { bottom: 25 } }
+                }
+            });
+        }
+
+        /**
+         * Menghapus data untuk tahun yang dipilih dari Firebase.
+         */
+        function hapusTahun(tahun) {
+            if (confirm(`Hapus tahun ${tahun} beserta semua datanya?`)) {
+                showLoading();
+                requestAnimationFrame(() => {
+                    remove(ref(db, `pengunjung/${tahun}`))
+                        .then(() => {
+                            alert(`Data untuk tahun ${tahun} berhasil dihapus.`);
+                            showTahun();
+                        })
+                        .catch((error) => {
+                            alert("Gagal menghapus data: " + error.message);
+                            hideLoading();
+                        });
+                });
+            }
+        }
+
+        /**
+         * Menghapus data untuk bulan yang dipilih dari Firebase.
+         */
+        function hapusBulan() {
+            if (!currentTahun || !currentBulan) return;
+            if (confirm(`Hapus semua data pengunjung bulan ${currentBulan} ${currentTahun}?`)) {
+                showLoading();
+                requestAnimationFrame(() => {
+                    remove(ref(db, `pengunjung/${currentTahun}/${currentBulan}`))
+                        .then(() => {
+                            alert(`Data untuk bulan ${currentBulan} berhasil dihapus.`);
+                            showBulan(currentTahun);
+                        })
+                        .catch((error) => {
+                            alert("Gagal menghapus data: " + error.message);
+                            hideLoading();
+                        });
+                });
+            }
+        }
+
+        /**
+         * Menampilkan data pivot (rekap) bulanan untuk tahun yang dipilih.
+         */
+        function showPivotPerbandinganBulanan() {
+            if (!currentTahun) {
+                alert("Pilih tahun terlebih dahulu.");
+                return;
+            }
+            showLoading();
+            document.getElementById("judul-pivot").textContent = `Pivot Bulanan - ${currentTahun}`;
+            const yearRef = ref(db, `pengunjung/${currentTahun}`);
+            requestAnimationFrame(() => {
+                onValue(yearRef, (snapshot) => {
+                    const rekapJenjang = {}, rekapKeterangan = {}, rekapKategori = {}, rekapNama = {}, rekapBuku = {};
+                    snapshot.forEach(bulanSnap => {
+                        bulanSnap.forEach(dataSnap => {
+                            const data = dataSnap.val();
+                            const normalizedJenjang = normalizeInputValue('jenjang', data.jenjang);
+                            const normalizedKeterangan = normalizeInputValue('keterangan', data.keterangan);
+                            const normalizedKategori = normalizeInputValue('kategori', data.kategori);
+                            const normalizedNama = normalizeInputValue('nama', data.nama);
+                            const normalizedJudulBuku = normalizeInputValue('judulBuku', data.judulBuku);
+                            if (normalizedJenjang) rekapJenjang[normalizedJenjang] = (rekapJenjang[normalizedJenjang] || 0) + 1;
+                            if (normalizedKeterangan) rekapKeterangan[normalizedKeterangan] = (rekapKeterangan[normalizedKeterangan] || 0) + 1;
+                            if (normalizedKategori) rekapKategori[normalizedKategori] = (rekapKategori[normalizedKategori] || 0) + 1;
+                            if (normalizedNama) rekapNama[normalizedNama] = (rekapNama[normalizedNama] || 0) + 1;
+                            if (normalizedJudulBuku) rekapBuku[normalizedJudulBuku] = (rekapBuku[normalizedJudulBuku] || 0) + 1;
+                        });
+                    });
+                    renderTable("rekap-jenjang", rekapJenjang);
+                    renderTable("rekap-keterangan", rekapKeterangan);
+                    renderTable("rekap-kategori", rekapKategori);
+                    renderTable("rekap-nama", rekapNama);
+                    renderTable("rekap-buku", rekapBuku);
+                    hideLoading();
+                    showSection('pivot-section');
+                }, { onlyOnce: true });
+            });
+        }
+
+        /**
+         * Menampilkan data pivot (rekap) tahunan secara keseluruhan.
+         */
+        function showPivotPerbandinganTahunan() {
+            showLoading();
+            document.getElementById("judul-pivot").textContent = `Pivot Tahunan Keseluruhan`;
+            const pengunjungRef = ref(db, "pengunjung");
+            requestAnimationFrame(() => {
+                onValue(pengunjungRef, (snapshot) => {
+                    const rekapJenjang = {}, rekapKeterangan = {}, rekapKategori = {}, rekapNama = {}, rekapBuku = {};
+                    snapshot.forEach(childSnap => {
+                        childSnap.forEach(bulanSnap => {
+                            const bulanVal = bulanSnap.val() || {};
+                            Object.values(bulanVal).forEach(data => {
+                                if (!data) return;
+                                const normalizedJenjang = normalizeInputValue('jenjang', data.jenjang);
+                                const normalizedKeterangan = normalizeInputValue('keterangan', data.keterangan);
+                                const normalizedKategori = normalizeInputValue('kategori', data.kategori);
+                                const normalizedNama = normalizeInputValue('nama', data.nama);
+                                const normalizedJudulBuku = normalizeInputValue('judulBuku', data.judulBuku);
+                                if (normalizedJenjang) rekapJenjang[normalizedJenjang] = (rekapJenjang[normalizedJenjang] || 0) + 1;
+                                if (normalizedKeterangan) rekapKeterangan[normalizedKeterangan] = (rekapKeterangan[normalizedKeterangan] || 0) + 1;
+                                if (normalizedKategori) rekapKategori[normalizedKategori] = (rekapKategori[normalizedKategori] || 0) + 1;
+                                if (normalizedNama) rekapNama[normalizedNama] = (rekapNama[normalizedNama] || 0) + 1;
+                                if (normalizedJudulBuku) rekapBuku[normalizedJudulBuku] = (rekapBuku[normalizedJudulBuku] || 0) + 1;
+                            });
+                        });
+                    });
+                    renderTable("rekap-jenjang", rekapJenjang);
+                    renderTable("rekap-keterangan", rekapKeterangan);
+                    renderTable("rekap-kategori", rekapKategori);
+                    renderTable("rekap-nama", rekapNama);
+                    renderTable("rekap-buku", rekapBuku);
+                    hideLoading();
+                    showSection('pivot-section');
+                }, { onlyOnce: true });
+            });
+        }
+
+        // Event Listeners untuk tombol-tombol di header
+        btnPivot.addEventListener('click', showPivot);
+        btnChart.addEventListener('click', showChart);
+        btnPerBulan.addEventListener('click', showPerbandingan);
+        btnPivotBulan.addEventListener('click', showPivotPerbandinganBulanan);
+        btnPerTahun.addEventListener('click', showPerbandinganTahun);
+        btnPivotTahun.addEventListener('click', showPivotPerbandinganTahunan);
+        btnHapus.addEventListener('click', hapusBulan);
+
+        // Event Listeners untuk tombol navigasi pivot baru
+        btnPivotJenjang.addEventListener('click', () => scrollToSection('rekap-jenjang-section'));
+        btnPivotKeterangan.addEventListener('click', () => scrollToSection('rekap-keterangan-section'));
+        btnPivotKategori.addEventListener('click', () => scrollToSection('rekap-kategori-section'));
+        btnPivotNama.addEventListener('click', () => scrollToSection('rekap-nama-section'));
+        btnPivotBuku.addEventListener('click', () => scrollToSection('rekap-buku-section'));
+
+        // Panggil showTahun() saat DOM selesai dimuat untuk menampilkan halaman awal
+        document.addEventListener('DOMContentLoaded', showTahun);
+    </script>
+    <style>
+        /* Variabel CSS untuk warna */
+        :root {
+            --primary: #00bcd4;
+            --primary-dark: #0097a7;
+            --danger: #e53935;
+            --bg: #f5f9fa;
+            --card-bg: #ffffff;
+            --text-dark: #333;
+            --text-light: #555;
+        }
+
+        /* Gaya dasar body */
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text-dark);
+        }
+
+        /* Gaya header */
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 12px 20px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: 0.5px;
+            text-align: right;
+        }
+
+        /* Gaya main content area */
+        main {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        /* Gaya heading section */
+        h2 {
+            margin-bottom: 15px;
+            margin-top: 25px;
+            color: var(--primary-dark);
+            font-weight: 600;
+        }
+
+        /* Gaya untuk setiap section */
+        section {
+            margin-bottom: 40px;
+            padding: 20px;
+            background: var(--card-bg);
+            border-radius: 14px;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+        }
+        .pivot-section-container {
+            margin-bottom: 20px;
+            padding: 20px;
+            background: var(--card-bg);
+            border-radius: 14px;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+        }
+
+        /* Gaya tombol */
+        button {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.25s ease;
+        }
+        .btn-primary { 
+            background: var(--primary); 
+            color: white; 
+        }
+        .btn-primary:hover { 
+            background: var(--primary-dark); 
+        }
+        .btn-back {
+            background: #e0f7fa;
+            color: var(--primary-dark);
+            border: 1px solid #b2ebf2;
+        }
+        .btn-back:hover { 
+            background: #b2ebf2; 
+        }
+        .danger { 
+            background: var(--danger); 
+            color: white; 
+        }
+        .danger:hover { 
+            background: #c62828; 
+        }
+        .btn-pivot-nav {
+            background-color: #f0f0f0;
+            color: #555;
+        }
+        .btn-pivot-nav:hover {
+            background-color: #e0e0e0;
+            color: #333;
+        }
+
+        /* Gaya tabel */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        th, td {
+            border: 1px solid #eee;
+            padding: 10px 14px;
+            text-align: left;
+            font-size: 14px;
+        }
+        th {
+            background-color: var(--primary);
+            color: white;
+            font-weight: 600;
+            font-size: 15px;
+        }
+        td { 
+            background-color: #fff; 
+        }
+        td.num { 
+            text-align: right; 
+        }
+        tr:nth-child(even) td { 
+            background: #f9f9f9; 
+        }
+
+        /* Gaya untuk card tahun dan bulan */
+        #tahun-list, #bulan-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 20px;
+        }
+        .year-card, .month-card {
+            position: relative;
+            background: var(--card-bg);
+            padding: 28px 20px;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--primary-dark);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.07);
+            cursor: pointer;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        .year-card:hover, .month-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+        }
+
+        /* Tombol hapus 'x' pada card */
+        .btn-x {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            background: none;
+            border: none;
+            color: #444;
+            padding: 2px 6px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+        .btn-x:hover { 
+            color: var(--danger); 
+        }
+
+        /* Gaya sidebar chart */
+        #chart-sidebar {
+            position: fixed;
+            top: 0;
+            right: -100%;
+            width: 420px;
+            height: 100%;
+            background: var(--card-bg);
+            box-shadow: -4px 0 15px rgba(0,0,0,0.15);
+            z-index: 9999;
+            padding: 25px;
+            padding-bottom: 40px;
+            transition: right 0.4s ease;
+            overflow-y: auto;
+        }
+        #chart-sidebar.active { 
+            right: 0; 
+        }
+        #chart-sidebar h1 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: var(--primary-dark);
+        }
+        #chart-sidebar .close-btn {
+            position: absolute;
+            top: 12px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: #000;
+            font-size: 24px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+        .close-btn:hover { 
+            color: var(--danger); 
+        }
+
+        /* Gaya tambahan untuk pivot di bawah grafik */
+        .pivot-wrapper {
+            margin-top: 20px;
+            gap: 18px;
+        }
+        .pivot-wrapper h2 {
+            margin-top: 14px;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        /* Gaya untuk loading overlay */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999;
+            display: none; /* Sembunyikan secara default */
+        }
+        .loading-logo {
+            width: 80px; /* Ukuran logo */
+            height: auto;
+            animation: pulse-opacity 1.5s ease-in-out infinite alternate;
+        }
+        .loading-text {
+            margin-top: 15px;
+            font-size: 1.2em;
+            color: var(--primary-dark);
+            font-weight: bold;
+        }
+        /* Animasi pudar-kembali */
+        @keyframes pulse-opacity {
+            from {
+                opacity: 0.4;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* Responsive design */
+        @media (max-width: 900px) {
+            #chart-sidebar { 
+                width: 100%; 
+            }
+            .year-card, .month-card { 
+                padding: 18px 12px; 
+                font-size: 18px; 
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-left">
+        <button id="btn-back" class="btn-back" style="display:none;">🔙</button>
+        <button id="btn-perbandingan-tahun" class="btn-primary" style="display:none;">📈 Grafik Tahunan</button>
+        <button id="btn-pivot-tahun" class="btn-primary" style="display:none;">📊 Pivot Tahunan</button>
+        <button id="btn-perbandingan" class="btn-primary" style="display:none;">📈 Grafik Bulanan</button>
+        <button id="btn-pivot-bulan" class="btn-primary" style="display:none;">📊 Pivot Bulanan</button>
+        <button id="btn-pivot" class="btn-primary" style="display:none;">📊 Pivot Bulan</button>
+        <button id="btn-chart" class="btn-primary" style="display:none;">📉 Grafik Bulan</button>
+        <button id="btn-hapus" class="danger" style="display:none;">🗑 Hapus Bulan</button>
+        <button id="btn-pivot-jenjang" class="btn-pivot-nav" style="display:none;">Jenjang</button>
+        <button id="btn-pivot-keterangan" class="btn-pivot-nav" style="display:none;">Keterangan</button>
+        <button id="btn-pivot-kategori" class="btn-pivot-nav" style="display:none;">Kategori</button>
+        <button id="btn-pivot-nama" class="btn-pivot-nav" style="display:none;">Nama</button>
+        <button id="btn-pivot-buku" class="btn-pivot-nav" style="display:none;">Buku</button>
+    </div>
+    <h1 id="judul-header">Data Daftar Pengunjung Perpustakaan Lubangsa</h1>
+</header>
+
+<main>
+    <section id="tahun-section">
+        <div id="tahun-list"></div>
+    </section>
+
+    <section id="bulan-section" style="display:none;">
+        <div id="bulan-list"></div>
+    </section>
+
+    <section id="pengunjung-section" style="display:none;">
+        <h2 id="judul-pengunjung">Daftar Pengunjung</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>No</th><th>Tanggal</th><th>Nama</th><th>Blok</th>
+                    <th>Jenjang</th><th>Judul Buku</th><th>Kategori</th><th>Keterangan</th>
+                </tr>
+            </thead>
+            <tbody id="pengunjung-table"></tbody>
+        </table>
+    </section>
+
+    <section id="pivot-section" style="display:none;">
+        <h2 id="judul-pivot"></h2>
+        <section id="rekap-jenjang-section">
+            <h2>Rekap Jenjang Pendidikan</h2>
+            <table id="rekap-jenjang"></table>
+        </section>
+        <section id="rekap-keterangan-section">
+            <h2>Rekap Keterangan</h2>
+            <table id="rekap-keterangan"></table>
+        </section>
+        <section id="rekap-kategori-section">
+            <h2>Rekap Kategori</h2>
+            <table id="rekap-kategori"></table>
+        </section>
+        <section id="rekap-nama-section">
+            <h2>Rekap Nama Pengunjung</h2>
+            <table id="rekap-nama"></table>
+        </section>
+        <section id="rekap-buku-section">
+            <h2>Rekap Judul Buku</h2>
+            <table id="rekap-buku"></table>
+        </section>
+    </section>
+</main>
+
+<div id="chart-sidebar">
+    <button class="close-btn" onclick="closeChartSidebar()">×</button>
+    <h1 id="judul-chart">Diagram & Grafik</h1>
+    <canvas id="chartJenjang" style="margin-top:10px;"></canvas>
+    <canvas id="chartKeterangan" style="margin-top:24px;"></canvas>
+    <canvas id="chartKategori" style="margin-top:24px;"></canvas>
+    <canvas id="chartPerbandinganSidebar" style="margin-top:24px;"></canvas>
+</div>
+
+<div id="loading-overlay">
+    <img src="logo.png" alt="Logo Perpustakaan" class="loading-logo">
+    <div class="loading-text">Memproses</div>
+</div>
+</body>
+</html>

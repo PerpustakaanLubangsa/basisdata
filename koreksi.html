@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="logo.png">
+    <title>Basis Data & Inventaris</title>
+    <!-- CDN untuk Firebase Modular SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+
+        // Konfigurasi Firebase Anda (Sama dengan p.html)
+        const firebaseConfig = {
+            apiKey: "AIzaSyC8DOLvUXXqfpguhs7j3_Ex6NhBVHk60i8",
+            authDomain: "datapengunjung-e80b8.firebaseapp.com",
+            projectId: "datapengunjung-e80b8",
+            storageBucket: "datapengunjung-e80b8.firebasestorage.app",
+            messagingSenderId: "793849975208",
+            appId: "1:793849975208:web:5f046eb7d153cf16378d9d",
+            databaseURL: "https://datapengunjung-e80b8-default-rtdb.firebaseio.com/"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // Elemen DOM
+        const manualCorrectionForm = document.getElementById('manual-correction-form');
+        const incorrectValueInput = document.getElementById('incorrect-value');
+        const correctValueInput = document.getElementById('correct-value');
+        const correctionFieldSelect = document.getElementById('correction-field');
+        const correctionStatus = document.getElementById('correction-status');
+        const suggestionsContainer = document.getElementById('suggestions-container');
+        const applySelectedBtn = document.getElementById('apply-selected-corrections');
+        const scanSuggestionsBtn = document.getElementById('scan-suggestions-btn');
+        const confirmAllBookBtn = document.getElementById('confirm-all-book');
+        const confirmAllNameBtn = document.getElementById('confirm-all-name');
+
+        // --- Variabel Global untuk menyimpan saran ---
+        let suggestions = [];
+
+        // --- Helper Functions ---
+        /**
+         * Mengubah string menjadi Title Case.
+         * @param {string} str - String yang akan diubah.
+         * @returns {string} String dalam Title Case.
+         */
+        function toTitleCase(str) {
+            if (typeof str !== 'string' || !str.trim()) {
+                return '';
+            }
+            return str.toLowerCase().split(' ').map(word => {
+                if (word.length === 0) return '';
+                return word.charAt(0).toUpperCase() + word.slice(1);
+            }).join(' ');
+        }
+
+        /**
+         * Mengamankan string dari karakter HTML khusus.
+         * @param {string} unsafe - String yang mungkin mengandung karakter HTML.
+         * @returns {string} String yang sudah diamankan.
+         */
+        function escapeHtml(unsafe) {
+            if (unsafe === null || unsafe === undefined) return '';
+            return String(unsafe)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        /**
+         * Menampilkan modal kustom (pengganti alert/confirm).
+         * @param {string} message - Pesan yang akan ditampilkan.
+         * @param {boolean} isConfirm - Apakah ini modal konfirmasi.
+         * @returns {Promise<boolean>} Resolves true jika dikonfirmasi, false jika dibatalkan/ditutup.
+         */
+        function showCustomModal(message, isConfirm = false) {
+            return new Promise(resolve => {
+                const modal = document.createElement('div');
+                modal.className = 'custom-modal';
+                let buttonsHtml = `<button class="btn-primary" onclick="this.parentNode.parentNode.remove(); resolve(true);">OK</button>`;
+                if (isConfirm) {
+                    buttonsHtml = `
+                        <button class="btn-primary" id="modal-confirm-yes">Ya, Lanjutkan</button>
+                        <button class="btn-back" id="modal-confirm-no">Batal</button>
+                    `;
+                }
+
+                modal.innerHTML = `
+                    <div class="custom-modal-content">
+                        <p>${message}</p>
+                        ${isConfirm ? `<p style="font-weight: bold; color: red;">Aksi ini tidak bisa dibatalkan!</p>` : ''}
+                        <div style="display: flex; justify-content: center; gap: 10px; margin-top: 20px;">
+                            ${buttonsHtml}
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+
+                if (isConfirm) {
+                    document.getElementById('modal-confirm-yes').onclick = () => {
+                        modal.remove();
+                        resolve(true);
+                    };
+                    document.getElementById('modal-confirm-no').onclick = () => {
+                        modal.remove();
+                        resolve(false);
+                    };
+                }
+            });
+        }
+
+        // --- Manual Correction Logic ---
+        /**
+         * Menerapkan perbaikan data secara manual di Firebase.
+         */
+        async function applyManualCorrection() {
+            const field = correctionFieldSelect.value;
+            const incorrect = incorrectValueInput.value.trim();
+            const correct = correctValueInput.value.trim();
+
+            if (!field || !incorrect || !correct) {
+                await showCustomModal('Semua kolom perbaikan harus diisi.');
+                return;
+            }
+
+            const confirmed = await showCustomModal(
+                `Anda yakin ingin mengganti semua '${escapeHtml(incorrect)}' di kolom '${escapeHtml(field)}' menjadi '${escapeHtml(correct)}'?`,
+                true
+            );
+
+            if (!confirmed) {
+                correctionStatus.textContent = 'Perbaikan dibatalkan.';
+                correctionStatus.style.color = 'grey';
+                return;
+            }
+
+            correctionStatus.textContent = 'Memproses perbaikan data...';
+            correctionStatus.style.color = 'orange';
+
+            try {
+                const pengunjungRef = ref(db, "pengunjung");
+                const snapshot = await get(pengunjungRef);
+
+                if (!snapshot.exists()) {
+                    correctionStatus.textContent = 'Tidak ada data pengunjung.';
+                    correctionStatus.style.color = 'red';
+                    return;
+                }
+
+                let changesMade = 0;
+                const updates = {};
+
+                snapshot.forEach(yearSnap => {
+                    yearSnap.forEach(monthSnap => {
+                        monthSnap.forEach(visitorSnap => {
+                            const visitorData = visitorSnap.val();
+                            const fullPath = `pengunjung/${yearSnap.key}/${monthSnap.key}/${visitorSnap.key}/${field}`;
+
+                            // Pastikan nilai di DB tidak kosong dan cocok persis
+                            if (visitorData[field] && visitorData[field] === incorrect) {
+                                updates[fullPath] = correct;
+                                changesMade++;
+                            }
+                        });
+                    });
+                });
+
+                if (changesMade > 0) {
+                    await update(ref(db), updates);
+                    correctionStatus.textContent = `Berhasil mengoreksi ${changesMade} entri di kolom '${field}'.`;
+                    correctionStatus.style.color = 'green';
+                } else {
+                    correctionStatus.textContent = `Tidak ada entri yang cocok dengan '${escapeHtml(incorrect)}' di kolom '${escapeHtml(field)}'. Perhatikan kapitalisasi dan spasi.`;
+                    correctionStatus.style.color = 'blue';
+                }
+
+            } catch (error) {
+                correctionStatus.textContent = `Error saat mengoreksi data: ${error.message}`;
+                correctionStatus.style.color = 'red';
+                console.error("Error during manual data correction:", error);
+            }
+        }
+
+        // --- Automatic Suggestion Logic ---
+        /**
+         * Memindai data dan menghasilkan saran koreksi.
+         */
+        async function generateSuggestions() {
+            suggestionsContainer.innerHTML = '<p>Memindai data untuk saran koreksi...</p>';
+            applySelectedBtn.style.display = 'none';
+            confirmAllBookBtn.style.display = 'none';
+            confirmAllNameBtn.style.display = 'none';
+
+            const pengunjungRef = ref(db, "pengunjung");
+            const snapshot = await get(pengunjungRef);
+
+            if (!snapshot.exists()) {
+                suggestionsContainer.innerHTML = '<p>Tidak ada data untuk dipindai.</p>';
+                return;
+            }
+
+            const rawData = [];
+            snapshot.forEach(yearSnap => {
+                yearSnap.forEach(monthSnap => {
+                    monthSnap.forEach(visitorSnap => {
+                        const visitorKey = visitorSnap.key;
+                        const year = yearSnap.key;
+                        const month = monthSnap.key;
+                        const data = visitorSnap.val();
+                        rawData.push({ year, month, visitorKey, data });
+                    });
+                });
+            });
+
+            suggestions = []; // Reset global suggestions array
+            const processedSuggestionsMap = {}; // Untuk mengelompokkan saran berdasarkan nilai koreksi yang sama
+
+            /**
+             * Memproses suatu field untuk mencari inkonsistensi dan menghasilkan saran.
+             * @param {string} field - Nama field yang akan diproses (e.g., 'judulBuku', 'nama').
+             * @param {Array<Object>} specialRules - Aturan khusus untuk field ini.
+             */
+            const processField = (field, specialRules = []) => {
+                const valueMap = {}; // { lowerCaseValue: { originalCaseValue: count, paths: [] } }
+
+                rawData.forEach(entry => {
+                    const value = entry.data[field];
+                    // Lewati jika nilai kosong, null, undefined, atau hanya spasi
+                    if (!value || (typeof value === 'string' && value.trim() === '')) {
+                        return;
+                    }
+                    const lowerValue = String(value).toLowerCase().trim();
+                    if (!valueMap[lowerValue]) {
+                        valueMap[lowerValue] = { variations: {}, paths: [] };
+                    }
+                    valueMap[lowerValue].variations[value] = (valueMap[lowerValue].variations[value] || 0) + 1;
+                    // Kumpulkan semua path untuk variasi ini
+                    valueMap[lowerValue].paths.push(`pengunjung/${entry.year}/${entry.month}/${entry.visitorKey}/${field}`);
+                });
+
+                for (const lowerVal in valueMap) {
+                    const entry = valueMap[lowerVal];
+                    const sortedVariations = Object.entries(entry.variations).sort((a, b) => b[1] - a[1]);
+                    const mostCommon = sortedVariations[0][0];
+
+                    let finalNewVal = toTitleCase(mostCommon); // Default ke Title Case dari yang paling umum
+
+                    // Terapkan aturan khusus jika ada dan cocok
+                    if (specialRules.length > 0) {
+                        for (const rule of specialRules) {
+                            if (lowerVal.includes(rule.keyword)) {
+                                finalNewVal = rule.correctValue;
+                                break; // Ambil aturan pertama yang cocok
+                            }
+                        }
+                    }
+
+                    // Kumpulkan semua nilai "lama" yang perlu dikoreksi menjadi finalNewVal
+                    const oldValuesToCorrect = new Set();
+                    const pathsToCorrect = [];
+
+                    for (const oldVal of Object.keys(entry.variations)) {
+                        // Jika nilai lama berbeda dari nilai yang diinginkan
+                        if (oldVal !== finalNewVal) {
+                            oldValuesToCorrect.add(oldVal);
+                            // Tambahkan path yang sesuai dengan nilai lama ini
+                            rawData.filter(e => e.data[field] === oldVal).forEach(e => {
+                                const path = `pengunjung/${e.year}/${e.month}/${e.visitorKey}/${field}`;
+                                pathsToCorrect.push(path);
+                            });
+                        }
+                    }
+
+                    // Hanya buat saran jika ada nilai lama yang perlu dikoreksi
+                    if (oldValuesToCorrect.size > 0) {
+                        const suggestionKey = `${field}-${finalNewVal}`;
+                        // Jika saran untuk finalNewVal ini belum ada, inisialisasi
+                        if (!processedSuggestionsMap[suggestionKey]) {
+                            processedSuggestionsMap[suggestionKey] = {
+                                field,
+                                oldValues: new Set(),
+                                newVal: finalNewVal,
+                                paths: []
+                            };
+                        }
+                        // Gabungkan nilai lama dan path ke dalam saran yang sudah ada
+                        oldValuesToCorrect.forEach(val => processedSuggestionsMap[suggestionKey].oldValues.add(val));
+                        pathsToCorrect.forEach(path => processedSuggestionsMap[suggestionKey].paths.push(path));
+                    }
+                }
+            };
+
+            // Aturan khusus untuk 'judulBuku'
+            const judulBukuRules = [
+                { keyword: 'koran', correctValue: 'Koran' },
+                { keyword: 'conan', correctValue: 'Detektif Conan' }
+            ];
+
+            // Proses kedua field
+            processField('judulBuku', judulBukuRules);
+            processField('nama');
+
+            // Konversi map saran menjadi array final suggestions
+            for (const key in processedSuggestionsMap) {
+                const sug = processedSuggestionsMap[key];
+                const oldValsStr = [...sug.oldValues].map(v => `'${escapeHtml(v)}'`).join(", "); // Format untuk tampilan
+                sug.oldValDisplay = oldValsStr; // Simpan untuk ditampilkan
+                suggestions.push(sug);
+            }
+
+            renderSuggestions(suggestions);
+        }
+
+        /**
+         * Merender saran koreksi ke DOM.
+         * @param {Array<Object>} suggestionsToRender - Array objek saran yang akan dirender.
+         */
+        function renderSuggestions(suggestionsToRender) {
+            suggestionsContainer.innerHTML = '';
+            if (suggestionsToRender.length === 0) {
+                suggestionsContainer.innerHTML = '<p>Tidak ditemukan saran koreksi otomatis. Data Anda sudah cukup rapi! ✨</p>';
+                applySelectedBtn.style.display = 'none';
+                confirmAllBookBtn.style.display = 'none';
+                confirmAllNameBtn.style.display = 'none';
+                return;
+            }
+
+            const ul = document.createElement('ul');
+            const hasBookSuggestions = suggestionsToRender.some(sug => sug.field === 'judulBuku');
+            const hasNameSuggestions = suggestionsToRender.some(sug => sug.field === 'nama');
+            
+            suggestionsToRender.forEach((sug, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <label>
+                        <input type="checkbox" class="correction-checkbox" data-index="${index}" data-field="${sug.field}">
+                        <strong>${sug.field === 'nama' ? 'Nama Pengunjung' : 'Judul Buku'}:</strong>
+                        ${sug.oldValDisplay} ➡️ "${escapeHtml(sug.newVal)}"
+                    </label>
+                `;
+                ul.appendChild(li);
+            });
+            suggestionsContainer.appendChild(ul);
+            applySelectedBtn.style.display = 'block';
+
+            if (hasBookSuggestions) {
+                confirmAllBookBtn.style.display = 'block';
+            }
+            if (hasNameSuggestions) {
+                confirmAllNameBtn.style.display = 'block';
+            }
+        }
+
+        /**
+         * Menerapkan saran koreksi yang dipilih.
+         */
+        async function applySelectedCorrections() {
+            const checkedBoxes = document.querySelectorAll('.correction-checkbox:checked');
+            if (checkedBoxes.length === 0) {
+                await showCustomModal('Pilih setidaknya satu saran untuk diterapkan.');
+                return;
+            }
+
+            const confirmed = await showCustomModal(
+                `Anda yakin ingin menerapkan ${checkedBoxes.length} saran koreksi yang dipilih?`,
+                true
+            );
+
+            if (!confirmed) {
+                correctionStatus.textContent = 'Perbaikan dibatalkan.';
+                correctionStatus.style.color = 'grey';
+                return;
+            }
+
+            correctionStatus.textContent = `Menerapkan ${checkedBoxes.length} saran koreksi...`;
+            correctionStatus.style.color = 'orange';
+
+            try {
+                const allUpdates = {};
+                checkedBoxes.forEach(checkbox => {
+                    const index = parseInt(checkbox.dataset.index);
+                    const suggestion = suggestions[index]; // Mengakses dari array global 'suggestions'
+
+                    // Pastikan suggestion dan paths ada sebelum mengakses
+                    if (suggestion && suggestion.paths) {
+                        suggestion.paths.forEach(path => {
+                            allUpdates[path] = suggestion.newVal;
+                        });
+                    }
+                });
+
+                if (Object.keys(allUpdates).length > 0) {
+                    await update(ref(db), allUpdates);
+                    correctionStatus.textContent = `Berhasil menerapkan ${checkedBoxes.length} saran koreksi.`;
+                    correctionStatus.style.color = 'green';
+                    generateSuggestions(); // Pindai ulang setelah koreksi diterapkan
+                } else {
+                    correctionStatus.textContent = 'Tidak ada perubahan yang perlu diterapkan.';
+                    correctionStatus.style.color = 'blue';
+                }
+
+            } catch (error) {
+                correctionStatus.textContent = `Error saat menerapkan saran: ${error.message}`;
+                correctionStatus.style.color = 'red';
+                console.error("Error during batch correction:", error);
+            }
+        }
+
+        /**
+         * Menerapkan semua saran koreksi berdasarkan tipe field (judulBuku atau nama).
+         * @param {string} type - Tipe field yang akan dikoreksi ('judulBuku' atau 'nama').
+         */
+        async function applyAllCorrectionsByType(type) {
+            const relevantSuggestions = suggestions.filter(sug => sug.field === type);
+            if (relevantSuggestions.length === 0) {
+                await showCustomModal(`Tidak ada saran koreksi untuk ${type === 'judulBuku' ? 'Judul Buku' : 'Nama Pengunjung'}.`);
+                return;
+            }
+
+            const confirmed = await showCustomModal(
+                `Anda yakin ingin menerapkan SEMUA saran koreksi untuk ${type === 'judulBuku' ? 'Judul Buku' : 'Nama Pengunjung'}? Total: ${relevantSuggestions.length} perbaikan.`,
+                true
+            );
+
+            if (!confirmed) {
+                correctionStatus.textContent = 'Perbaikan dibatalkan.';
+                correctionStatus.style.color = 'grey';
+                return;
+            }
+
+            correctionStatus.textContent = `Menerapkan semua saran untuk ${type === 'judulBuku' ? 'Judul Buku' : 'Nama Pengunjung'}...`;
+            correctionStatus.style.color = 'orange';
+
+            try {
+                const allUpdates = {};
+                relevantSuggestions.forEach(suggestion => {
+                    if (suggestion && suggestion.paths) {
+                        suggestion.paths.forEach(path => {
+                            allUpdates[path] = suggestion.newVal;
+                        });
+                    }
+                });
+
+                await update(ref(db), allUpdates);
+                correctionStatus.textContent = `Berhasil menerapkan semua ${relevantSuggestions.length} saran untuk ${type === 'judulBuku' ? 'Judul Buku' : 'Nama Pengunjung'}.`;
+                correctionStatus.style.color = 'green';
+                generateSuggestions(); // Pindai ulang setelah koreksi diterapkan
+            } catch (error) {
+                correctionStatus.textContent = `Error saat menerapkan semua saran: ${error.message}`;
+                correctionStatus.style.color = 'red';
+                console.error("Error during batch correction:", error);
+            }
+        }
+        
+        // --- Event Listeners ---
+        document.getElementById('back-to-main').addEventListener('click', () => {
+            window.location.href = 'p.html';
+        });
+        document.getElementById('apply-manual-correction-btn').addEventListener('click', applyManualCorrection);
+        scanSuggestionsBtn.addEventListener('click', generateSuggestions);
+        applySelectedBtn.addEventListener('click', applySelectedCorrections);
+        confirmAllBookBtn.addEventListener('click', () => applyAllCorrectionsByType('judulBuku'));
+        confirmAllNameBtn.addEventListener('click', () => applyAllCorrectionsByType('nama'));
+
+        // Pindai awal saat halaman dimuat
+        document.addEventListener('DOMContentLoaded', generateSuggestions);
+    </script>
+    <style>
+        /* Gaya CSS Anda */
+        :root {
+            --primary: #00bcd4;
+            --primary-dark: #0097a7;
+            --danger: #e53935;
+            --bg: #f5f9fa;
+            --card-bg: #ffffff;
+            --text-dark: #333;
+            --text-light: #555;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text-dark);
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 12px 20px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: 0.5px;
+            text-align: right;
+        }
+
+        main {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        h2 {
+            margin-bottom: 15px;
+            margin-top: 25px;
+            color: var(--primary-dark);
+            font-weight: 600;
+        }
+
+        section {
+            margin-bottom: 40px;
+            padding: 20px;
+            background: var(--card-bg);
+            border-radius: 14px;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            transition: all 0.25s ease;
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+        .btn-back {
+            background: #e0f7fa;
+            color: var(--primary-dark);
+            border: 1px solid #b2ebf2;
+        }
+        .btn-back:hover {
+            background: #b2ebf2;
+        }
+
+        .custom-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+        .custom-modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            max-width: 350px;
+            width: 90%;
+            font-size: 16px;
+            color: var(--text-dark);
+        }
+        .custom-modal-content button {
+            margin: 15px 5px 0;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+
+        .correction-form label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-light);
+        }
+        .correction-form select,
+        .correction-form input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        .correction-form button {
+            width: 100%;
+            padding: 12px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        #correction-status {
+            margin-top: 15px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        #suggestions-section .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        #suggestions-section h3 {
+            margin-top: 20px;
+            font-size: 18px;
+            color: var(--primary-dark);
+        }
+        #suggestions-container ul {
+            list-style: none;
+            padding: 0;
+        }
+        #suggestions-container li {
+            background: #f0f8ff;
+            border: 1px solid #cfe8ff;
+            padding: 10px 15px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+        }
+        #suggestions-container li label {
+            margin: 0;
+            display: flex;
+            align-items: center;
+            width: 100%;
+            font-size: 15px;
+            color: var(--text-dark);
+        }
+        #suggestions-container li input[type="checkbox"] {
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+        #apply-selected-corrections {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-left">
+        <button id="back-to-main" class="btn-back">🔙 Kembali ke Utama</button>
+    </div>
+    <h1>Koreksi Data Pengunjung</h1>
+</header>
+
+<main>
+    <section id="manual-correction-section">
+        <h2>Koreksi Data Manual</h2>
+        <div class="correction-form" id="manual-correction-form">
+            <label for="correction-field">Pilih Kolom untuk Dikoreksi:</label>
+            <select id="correction-field">
+                <option value="nama">Nama Pengunjung</option>
+                <option value="judulBuku">Judul Buku</option>
+            </select>
+
+            <label for="incorrect-value">Nilai yang Salah (harus tepat):</label>
+            <input type="text" id="incorrect-value" placeholder="Contoh: 'koran', 'detektif conan 11'">
+
+            <label for="correct-value">Nilai yang Benar (yang diinginkan):</label>
+            <input type="text" id="correct-value" placeholder="Contoh: 'Koran', 'Detektif Conan'">
+
+            <button class="btn-primary" id="apply-manual-correction-btn">Terapkan Koreksi Manual</button>
+            <p id="correction-status"></p>
+        </div>
+    </section>
+
+    <section id="suggestions-section">
+        <h2>Saran Koreksi Otomatis</h2>
+        <button class="btn-primary" id="scan-suggestions-btn">🔎 Pindai Saran</button>
+        <div id="suggestions-container" style="margin-top: 20px;">
+            <p>Klik 'Pindai Saran' untuk mencari inkonsistensi data.</p>
+        </div>
+        <div class="btn-group">
+            <button class="btn-primary" id="apply-selected-corrections" style="display: none;">✅ Terapkan Saran yang Dipilih</button>
+            <button class="btn-primary" id="confirm-all-book" style="display: none;">✅ Konfirmasi Semua Judul Buku</button>
+            <button class="btn-primary" id="confirm-all-name" style="display: none;">✅ Konfirmasi Semua Nama Pengunjung</button>
+        </div>
+    </section>
+</main>
+
+</body>
+</html>
