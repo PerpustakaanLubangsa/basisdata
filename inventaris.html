@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Basis Data Buku Perpustakaan Lubangsa - Click to Edit</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* --- Tema Lembut (Soft/Modern Theme) --- */
+        :root {
+            --warna-dasar: #f4f7f6; 
+            --warna-primer: #00796B; /* Teal Baru, lebih elegan */
+            --warna-sekunder: #5C6BC0; /* Biru Ungu */
+            --warna-search: #FFA000; /* Amber untuk Search */
+            --warna-warning: #FFAB40; 
+            --warna-danger: #D32F2F; 
+            --warna-error-bg: #ffebee; 
+            --warna-error-border: #ef9a9a; 
+            --warna-teks: #212121;
+            --radius-halus: 8px; 
+            --bayangan-halus: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+            /* Warna Form Baru */
+            --warna-form-bg: #E0F7FA; 
+            --warna-form-border: #00BCD4; 
+        }
+
+        /* PERBAIKAN TAMPILAN: Pastikan HTML dan Body mengambil seluruh tinggi viewport */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden; 
+            font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: var(--warna-teks);
+            background-color: var(--warna-dasar); 
+        }
+        
+        /* --- Gaya Loading Overlay (Ditingkatkan dengan Progress Bar) --- */
+        #loadingOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.95); /* Sedikit lebih opaque */
+            z-index: 1000;
+            display: none; 
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            color: var(--warna-primer);
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Hapus .spinner dan @keyframes spin */
+        .spinner { display: none; } 
+
+        .loading-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 80%;
+            max-width: 400px;
+        }
+
+        .loading-text {
+            font-weight: 600;
+            margin-bottom: 15px;
+            text-align: center;
+            min-height: 25px; /* Mencegah layar bergeser saat teks ganti */
+        }
+
+        /* Gaya Progress Bar BARU */
+        .progress-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 5px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .progress-bar {
+            height: 25px;
+            width: 0%;
+            background-color: var(--warna-primer);
+            text-align: center;
+            line-height: 25px;
+            color: white;
+            transition: width 0.3s ease; 
+        }
+        
+        .progress-percent {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        /* --- Kontainer Header Utama (Terkunci/Fixed) --- */
+        .fixed-header-container {
+            position: sticky; 
+            top: 0;
+            z-index: 5; 
+            background-color: var(--warna-dasar); 
+            padding: 15px 20px 0 20px; 
+            margin: 0; 
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            box-sizing: border-box; 
+        }
+
+        /* Kontainer Utama untuk Fixed Header dan Scrollable Content */
+        .main-container {
+            margin-top: -20px; 
+            padding: 20px; 
+            padding-top: 20px; 
+        }
+        
+        .page-header {
+            display: flex;
+            justify-content: space-between; 
+            align-items: center; 
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e0e0e0; 
+        }
+
+        .page-header h1 {
+            margin: 0; 
+            font-size: 28px; 
+            font-weight: 700;
+            color: var(--warna-primer);
+        }
+
+        .header-buttons {
+            display: flex;
+            gap: 12px; 
+        }
+
+        /* Gaya Tombol Ikon Header */
+        .tombol-ikon { 
+            width: 50px; height: 50px; padding: 0; font-size: 22px; 
+            cursor: pointer; color: white; border: none; border-radius: 50%; 
+            box-shadow: var(--bayangan-halus); display: flex; align-items: center;
+            justify-content: center; transition: all 0.2s ease-in-out;
+        }
+        .tombol-ikon:hover {
+            opacity: 0.9; transform: translateY(-3px) scale(1.05); box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Warna Tombol Header */
+        .tombol-impor { background-color: var(--warna-sekunder); } 
+        .tombol-salin-semua { background-color: var(--warna-warning); } 
+        .tombol-hapus-semua { background-color: var(--warna-danger); font-size: 20px;}
+        .tombol-tambah { background-color: var(--warna-primer); font-weight: bold; font-size: 32px; border-radius: var(--radius-halus); width: auto; padding: 0 20px;}
+        .tombol-error-list { 
+            background-color: var(--warna-danger); 
+            position: relative;
+        } 
+
+        /* --- Area Pencarian --- */
+        .search-area {
+            padding: 15px 0;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .search-container {
+            flex-grow: 1;
+            position: relative;
+        }
+
+        #input_pencarian {
+            padding: 12px 15px 12px 45px; 
+            width: 100%; box-sizing: border-box; 
+            border: 2px solid #ddd; border-radius: var(--radius-halus); 
+            transition: border-color 0.3s, box-shadow 0.3s;
+            font-size: 16px;
+        }
+
+        #input_pencarian:focus { 
+            border-color: var(--warna-search); 
+            box-shadow: 0 0 0 3px rgba(255, 160, 0, 0.2);
+            outline: none; 
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9e9e9e;
+        }
+
+        /* --- Gaya Modal (Pop-up) --- */
+        .modal { display: none; position: fixed; z-index: 10; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); padding-top: 50px; }
+        .modal-content { 
+            background-color: white; margin: 5% auto; padding: 30px; border: none;
+            width: 90%; max-width: 600px; 
+            border-radius: var(--radius-halus); 
+            box-shadow: 0 12px 24px rgba(0,0,0,0.3);
+            animation: fadeIn 0.3s ease-out;
+
+            /* Gaya Form Baru */
+            border: 2px solid var(--warna-form-border);
+            background-color: var(--warna-form-bg);
+        }
+        #modalSalin .modal-content { max-width: 400px; background-color: white; border-color: var(--warna-warning);}
+        
+        /* MODAL ERROR */
+        #modalError .modal-content { 
+            max-width: 800px; 
+            background-color: var(--warna-error-bg); 
+            border-color: var(--warna-error-border);
+        }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+
+        .close { color: #aaa; float: right; font-size: 32px; font-weight: bold; transition: color 0.2s;}
+        /* Hapus tombol close dari modal edit karena akan disave saat klik luar */
+        #modalEdit .close { display: none; }
+        
+        /* Gaya Form Input (Vertikal) */
+        .input-group { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+            margin-top: 20px;
+        }
+        .input-group > div { 
+            padding: 10px; 
+            border: 1px solid #B2EBF2;
+            border-radius: 6px;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: var(--warna-primer); 
+            font-size: 14px;
+            display: block;
+        }
+        input[type="text"], input[type="number"], input[type="date"] { 
+            padding: 10px; margin: 0; 
+            width: 100%; box-sizing: border-box; 
+            border: 1px solid #c0c0c0; border-radius: 4px; 
+            transition: border-color 0.2s, box-shadow 0.2s;
+            font-size: 14px;
+            background-color: #f9f9f9;
+        }
+        input:focus { 
+            border-color: var(--warna-search); 
+            box-shadow: 0 0 5px rgba(255, 160, 0, 0.3);
+            background-color: #ffffff;
+            outline: none; 
+        }
+        
+        /* Gaya Footer Form */
+        .form-footer { 
+            margin-top: 30px; 
+            display: flex;
+            justify-content: space-between; 
+            align-items: center;
+        }
+        
+        .form-footer button { 
+            border-radius: 6px; padding: 12px 25px; border: none; 
+            box-shadow: var(--bayangan-halus); cursor: pointer;
+            font-size: 16px; font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        
+        /* Tombol Save (di modal Tambah) */
+        #modalTambah .form-footer button {
+            background-color: var(--warna-primer); color: white; 
+        }
+        #modalTambah .form-footer button:hover { background-color: #004d40; }
+
+        /* Tombol Hapus (di modal Edit) */
+        .tombol-hapus-popup {
+            background-color: var(--warna-danger); 
+            color: white;
+        }
+        .tombol-hapus-popup:hover {
+            background-color: #A93226;
+        }
+        /* Teks Info Save (di modal Edit) */
+        .save-info {
+            font-size: 14px;
+            color: var(--warna-primer);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-right: 15px;
+        }
+        
+        /* Gaya Opsi Salin */
+        .copy-options button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: 6px;
+            border: 1px solid var(--warna-warning);
+            background-color: #FFF8E1; 
+            color: var(--warna-search);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .copy-options button:hover {
+            background-color: var(--warna-warning);
+            color: white;
+        }
+
+
+        /* --- Gaya Tabel Inti (Data Utama) --- */
+        .table-wrapper {
+            overflow-x: auto; 
+            margin-top: 25px;
+            padding-bottom: 5px; 
+        }
+        
+        table { 
+            border-collapse: collapse; 
+            table-layout: auto; 
+            border: none; 
+            border-radius: var(--radius-halus); 
+            overflow: hidden; 
+            width: 100%; 
+            min-width: 1400px; 
+            box-shadow: var(--bayangan-halus); 
+            background-color: white;
+        }
+        
+        th { 
+            border: 1px solid #e0e0e0; padding: 12px 8px; font-size: 14px; 
+            background-color: var(--warna-primer); color: white; font-weight: 700; 
+            text-align: center; vertical-align: middle; line-height: 1.4; 
+            white-space: nowrap; 
+        }
+        /* Menghapus kolom Aksi dari header */
+        #tabelBuku thead th:last-child { display: none; }
+
+        td { 
+            border: 1px solid #eeeeee; padding: 10px 8px; text-align: center; 
+            font-size: 14px; height: 35px; 
+            overflow: hidden; 
+            white-space: nowrap; 
+            text-overflow: ellipsis; 
+            max-width: 150px; 
+        }
+        td.col-judul { max-width: 300px; text-align: left; }
+        td.col-pengarang { max-width: 200px; text-align: left; }
+
+        /* Gaya Baris Hover (Indikasi Klik) */
+        #dataBuku tr { cursor: pointer; transition: background-color 0.2s; }
+        #dataBuku tr:hover {
+            background-color: #b2dfdb; 
+            box-shadow: 0 0 5px rgba(0, 121, 107, 0.5); 
+        }
+        
+        /* Menghapus kolom Aksi dari baris data */
+        #dataBuku tr td:last-child { display: none; }
+
+
+        /* Penyesuaian Lebar Kolom */
+        .col-nomor-sub { min-width: 70px; } 
+        .col-tgl { min-width: 100px; } 
+        .col-judul { min-width: 300px; }         
+        .col-pengarang { min-width: 150px; } 
+        .col-asal-sub, .col-jenis-sub, .col-bahasa-sub { min-width: 50px; } 
+        .col-asal-dari { min-width: 120px; }      
+        .col-harga-sub { min-width: 90px; }      
+        .col-klasifikasi { min-width: 100px; } 
+    
+        /* --- Gaya Tabel Data GAGAL (di dalam Modal) --- */
+        #tabelDataGagal {
+            box-shadow: none; /* Hilangkan bayangan di dalam modal */
+            min-width: unset;
+        }
+        #tabelDataGagal th {
+            background-color: var(--warna-danger);
+            font-size: 14px;
+        }
+        
+        /* Hapus kontainer error yang lama (yang di bawah tabel utama) */
+        #impor-error-container { display: none; }
+    </style>
+</head>
+<body>
+    <div id="loadingOverlay" style="display:none;">
+        <div class="loading-content">
+            <div class="loading-text">Memuat data, harap tunggu...</div>
+            
+            <div id="progressBarContainer" class="progress-container" style="display: none;">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+            <div id="progressPercent" class="progress-percent" style="display: none;">0%</div>
+        </div>
+    </div>
+
+    <div class="fixed-header-container">
+        <div class="page-header">
+            <h1><i class="fas fa-book-open"></i> Basis Data Buku Perpustakaan Lubangsa</h1>
+            <div class="header-buttons">
+                <button class="tombol-ikon tombol-error-list" onclick="bukaModalError()" title="Daftar Data Gagal Impor">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </button>
+
+                <button class="tombol-ikon tombol-impor" onclick="imporDariExcel()" title="Impor Data Excel"><i class="fas fa-file-import"></i></button>
+                <input type="file" id="excel-file-input" accept=".xlsx, .xls" style="display: none;">
+                
+                <button class="tombol-ikon tombol-salin-semua" onclick="bukaModal('salin')" title="Pilih Opsi Salin"><i class="fas fa-copy"></i></button>
+                
+                <button class="tombol-ikon tombol-hapus-semua" onclick="hapusSemuaData()" title="Hapus Semua Data"><i class="fas fa-trash-alt"></i></button>
+                
+                <button class="tombol-ikon tombol-tambah" onclick="bukaModal('tambah')" title="Tambah Buku Baru"><i class="fas fa-plus"></i> Tambah</button>
+            </div>
+        </div>
+
+        <div class="search-area">
+            <div class="search-container">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" id="input_pencarian" placeholder="Ketik untuk mencari data buku (No. Urut, Judul, Pengarang...)">
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-container">
+
+        <div id="modalTambah" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="tutupModal('tambah')">&times;</span>
+                <h2><i class="fas fa-plus-circle"></i> Formulir Input Data Buku</h2>
+                <div class="input-group">
+                    <div><label>No. Urut (Wajib):</label><input type="text" id="input_tambah_no_urut"></div>
+                    <div><label>No. Inventaris (Wajib):</label><input type="text" id="input_tambah_no_inventaris"></div>
+                    <div><label>Tanggal Diterima:</label><input type="date" id="input_tambah_tgl_diterima"></div>
+                    <div><label>Judul Buku:</label><input type="text" id="input_tambah_judul_buku"></div>
+                    <div><label>Pengarang:</label><input type="text" id="input_tambah_pengarang"></div>
+                    <div><label>Asal W. (Wakaf):</label><input type="text" id="input_tambah_asal_w"></div>
+                    <div><label>Asal H. (Hadiah):</label><input type="text" id="input_tambah_asal_h"></div>
+                    <div><label>Asal B. (Beli):</label><input type="text" id="input_tambah_asal_b"></div>
+                    <div><label>Asal LL. (Lain-lain):</label><input type="text" id="input_tambah_asal_ll"></div>
+                    <div><label>Asal Dari (Nama Pemberi/Sumber):</label><input type="text" id="input_tambah_asal_dari"></div>
+                    <div><label>Jenis U. (Umum):</label><input type="text" id="input_tambah_jenis_u"></div>
+                    <div><label>Jenis R. (Referensi):</label><input type="text" id="input_tambah_jenis_r"></div>
+                    <div><label>Bhs Ing. (Bahasa Inggris):</label><input type="text" id="input_tambah_bhs_ing"></div>
+                    <div><label>Bhs Arb. (Bahasa Arab):</label><input type="text" id="input_tambah_bhs_arb"></div>
+                    <div><label>Bhs Ind. (Bahasa Indonesia):</label><input type="text" id="input_tambah_bhs_ind"></div>
+                    <div><label>Bhs LL. (Bahasa Lain-lain):</label><input type="text" id="input_tambah_bhs_ll"></div>
+                    <div><label>Harga Satuan:</label><input type="number" id="input_tambah_harga_satuan"></div>
+                    <div><label>Harga Jumlah:</label><input type="number" id="input_tambah_harga_jumlah"></div>
+                    <div><label>Nomor Klasifikasi:</label><input type="text" id="input_tambah_no_klasifikasi"></div>
+                </div>
+                
+                <div class="form-footer">
+                    <button onclick="tambahBuku()">Simpan Buku</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modalEdit" class="modal">
+            <div class="modal-content">
+                <h2><i class="fas fa-edit"></i> Edit Data Buku</h2>
+                <input type="hidden" id="edit_key"> <div class="input-group">
+                    <div><label>No. Urut (Wajib):</label><input type="text" id="input_edit_no_urut"></div>
+                    <div><label>No. Inventaris (Wajib):</label><input type="text" id="input_edit_no_inventaris"></div>
+                    <div><label>Tanggal Diterima:</label><input type="date" id="input_edit_tgl_diterima"></div>
+                    <div><label>Judul Buku:</label><input type="text" id="input_edit_judul_buku"></div>
+                    <div><label>Pengarang:</label><input type="text" id="input_edit_pengarang"></div>
+                    <div><label>Asal W. (Wakaf):</label><input type="text" id="input_edit_asal_w"></div>
+                    <div><label>Asal H. (Hadiah):</label><input type="text" id="input_edit_asal_h"></div>
+                    <div><label>Asal B. (Beli):</label><input type="text" id="input_edit_asal_b"></div>
+                    <div><label>Asal LL. (Lain-lain):</label><input type="text" id="input_edit_asal_ll"></div>
+                    <div><label>Asal Dari (Nama Pemberi/Sumber):</label><input type="text" id="input_edit_asal_dari"></div>
+                    <div><label>Jenis U. (Umum):</label><input type="text" id="input_edit_jenis_u"></div>
+                    <div><label>Jenis R. (Referensi):</label><input type="text" id="input_edit_jenis_r"></div>
+                    <div><label>Bhs Ing. (Bahasa Inggris):</label><input type="text" id="input_edit_bhs_ing"></div>
+                    <div><label>Bhs Arb. (Bahasa Arab):</label><input type="text" id="input_edit_bhs_arb"></div>
+                    <div><label>Bhs Ind. (Bahasa Indonesia):</label><input type="text" id="input_edit_bhs_ind"></div>
+                    <div><label>Bhs LL. (Bahasa Lain-lain):</label><input type="text" id="input_edit_bhs_ll"></div>
+                    <div><label>Harga Satuan:</label><input type="number" id="input_edit_harga_satuan"></div>
+                    <div><label>Harga Jumlah:</label><input type="number" id="input_edit_harga_jumlah"></div>
+                    <div><label>Nomor Klasifikasi:</label><input type="text" id="input_edit_no_klasifikasi"></div>
+                </div>
+                
+                <div class="form-footer">
+                    <button class="tombol-hapus-popup" onclick="hapusBukuDariModal()">Hapus Data Ini</button>
+                    <div class="save-info"><i class="fas fa-save"></i> Perubahan disimpan otomatis saat klik di luar</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="modalSalin" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="tutupModal('salin')">&times;</span>
+                <h3 style="margin-top: 0; color: var(--warna-warning);"><i class="fas fa-clipboard"></i> Pilih Opsi Salin</h3>
+                <p>Pilih format data yang ingin Anda salin ke clipboard:</p>
+                <div class="copy-options">
+                    <button onclick="salinSemuaData(true)"><i class="fas fa-table"></i> Salin **Dengan** Header Tabel</button>
+                    <button onclick="salinSemuaData(false)"><i class="fas fa-clipboard-list"></i> Salin **Tanpa** Header Tabel (Data Saja)</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modalError" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="tutupModal('error')">&times;</span>
+                <h3 id="error-title" style="margin-top: 0; color: var(--warna-danger);"><i class="fas fa-exclamation-triangle"></i> Daftar Data Gagal Impor</h3>
+                
+                <p id="error-message" style="font-weight: 600; color: var(--warna-teks);">Belum ada data gagal impor yang tercatat.</p>
+
+                <div id="error-table-container" class="table-wrapper" style="display: none; margin-top: 15px; padding: 0;">
+                    <table id="tabelDataGagal">
+                        <thead>
+                            <tr>
+                                <th style="width: 10%;">Baris Excel</th>
+                                <th style="width: 30%;">Pesan Kesalahan</th>
+                                <th style="width: 60%;">Data Baris (Kolom A-D: No. Urut, No. Inventaris, Tgl, Judul)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataGagal">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="table-wrapper">
+            <table id="tabelBuku">
+                <thead>
+                    <tr>
+                        <th colspan="2">NOMOR</th>
+                        <th rowspan="2" class="col-tgl">Tanggal Diterima</th>
+                        <th rowspan="2" class="col-judul">Judul Buku</th>
+                        <th rowspan="2" class="col-pengarang">Pengarang</th>
+                        <th colspan="5">ASAL BUKU</th>
+                        <th colspan="2">JENIS</th>
+                        <th colspan="4">BAHASA</th>
+                        <th colspan="2">HARGA</th>
+                        <th rowspan="2" class="col-klasifikasi">Nomor Klasifikasi</th>
+                        <th rowspan="2" class="col-aksi">Aksi</th> </tr>
+                    <tr>
+                        <th class="col-nomor-sub">No. Urut</th>
+                        <th class="col-nomor-sub">No. Inventaris</th>
+                        <th class="col-asal-sub">W.</th>
+                        <th class="col-asal-sub">H.</th>
+                        <th class="col-asal-sub">B.</th>
+                        <th class="col-asal-sub">LL.</th>
+                        <th class="col-asal-dari">Dari</th>
+                        <th class="col-jenis-sub">U.</th>
+                        <th class="col-jenis-sub">R.</th>
+                        <th class="col-bahasa-sub">Ing.</th>
+                        <th class="col-bahasa-sub">Arb.</th>
+                        <th class="col-bahasa-sub">Ind.</th>
+                        <th class="col-bahasa-sub">LL.</th>
+                        <th class="col-harga-sub">Satuan</th>
+                        <th class="col-harga-sub">Jumlah</th>
+                        <th class="col-aksi">Aksi</th> </tr>
+                </thead>
+                <tbody id="dataBuku">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.4/xlsx.full.min.js"></script> 
+    <script>
+        // PASTIKAN ANDA MENGGANTI INI DENGAN KONFIGURASI FIREBASE ANDA SENDIRI
+        const firebaseConfig = {
+            apiKey: "AIzaSyC6MLSFGBeutysEL5kG3nO7-92pKw-AX34",
+            authDomain: "basisdata-ef1d8.firebaseapp.com",
+            databaseURL: "https://basisdata-ef1d8-default-rtdb.firebaseio.com",
+            projectId: "basisdata-ef1d8",
+            storageBucket: "basisdata-ef1d8.firebasestorage.app",
+            messagingSenderId: "368595611137",
+            appId: "1:368595611137:web:6cd13a5b109d3fbfca5a00"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const refBuku = database.ref('buku_final_v2'); 
+        const dataBukuTbody = document.getElementById('dataBuku');
+        const dataGagalTbody = document.getElementById('dataGagal'); 
+        const modalTambah = document.getElementById('modalTambah');
+        const modalEdit = document.getElementById('modalEdit'); 
+        const modalSalin = document.getElementById('modalSalin'); 
+        const modalError = document.getElementById('modalError'); 
+        const inputPencarian = document.getElementById('input_pencarian'); 
+
+        // Elemen Loading Bar
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const progressBarContainer = document.getElementById('progressBarContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercent = document.getElementById('progressPercent');
+
+
+        let semuaDataBuku = []; 
+        let isModalEditOpen = false; 
+        let dataGagalImporTerakhir = []; 
+
+        // FUNGSI DITINGKATKAN: Menampilkan loading
+        function showLoading(text = "Memuat data, harap tunggu...", showProgress = false) {
+            document.querySelector('.loading-text').textContent = text;
+            loadingOverlay.style.display = 'flex';
+            
+            // Kontrol tampilan progress bar
+            if (showProgress) {
+                progressBarContainer.style.display = 'block';
+                progressPercent.style.display = 'block';
+                updateProgressBar(0, text); // Reset ke 0%
+            } else {
+                progressBarContainer.style.display = 'none';
+                progressPercent.style.display = 'none';
+            }
+        }
+
+        // FUNGSI BARU: Mengupdate nilai progress bar
+        function updateProgressBar(percent, text = null) {
+            progressBar.style.width = percent + '%';
+            progressPercent.textContent = percent + '%';
+            if (text) {
+                document.querySelector('.loading-text').textContent = text;
+            }
+        }
+
+        // FUNGSI DITINGKATKAN: Menyembunyikan loading
+        function hideLoading() {
+            loadingOverlay.style.display = 'none';
+        }
+
+
+        // -----------------------------------------------------------
+        // 1. Kontrol Modal (Pop-up)
+        function bukaModal(jenis, key = null, data = null) { 
+            if (jenis === 'tambah') {
+                document.querySelectorAll('#modalTambah input').forEach(input => input.value = ''); 
+                modalTambah.style.display = "block"; 
+            } else if (jenis === 'edit' && key && data) {
+                isModalEditOpen = true; 
+                // ... (isi form edit) ...
+                document.getElementById('edit_key').value = key;
+                document.getElementById('input_edit_no_urut').value = data.no_urut || '';
+                document.getElementById('input_edit_no_inventaris').value = data.no_inventaris || '';
+                document.getElementById('input_edit_tgl_diterima').value = data.tgl_diterima || '';
+                document.getElementById('input_edit_judul_buku').value = data.judul_buku || '';
+                document.getElementById('input_edit_pengarang').value = data.pengarang || '';
+                document.getElementById('input_edit_asal_w').value = data.asal_w || '';
+                document.getElementById('input_edit_asal_h').value = data.asal_h || '';
+                document.getElementById('input_edit_asal_b').value = data.asal_b || '';
+                document.getElementById('input_edit_asal_ll').value = data.asal_ll || '';
+                document.getElementById('input_edit_asal_dari').value = data.asal_dari || '';
+                document.getElementById('input_edit_jenis_u').value = data.jenis_u || '';
+                document.getElementById('input_edit_jenis_r').value = data.jenis_r || '';
+                document.getElementById('input_edit_bhs_ing').value = data.bhs_ing || '';
+                document.getElementById('input_edit_bhs_arb').value = data.bhs_arb || '';
+                document.getElementById('input_edit_bhs_ind').value = data.bhs_ind || '';
+                document.getElementById('input_edit_bhs_ll').value = data.bhs_ll || '';
+                document.getElementById('input_edit_harga_satuan').value = data.harga_satuan || '';
+                document.getElementById('input_edit_harga_jumlah').value = data.harga_jumlah || '';
+                document.getElementById('input_edit_no_klasifikasi').value = data.no_klasifikasi || '';
+                
+                modalEdit.style.display = "block";
+            } else if (jenis === 'salin') {
+                modalSalin.style.display = "block";
+            } else if (jenis === 'error') {
+                modalError.style.display = "block";
+            }
+        }
+
+        // Membuka Modal Error
+        function bukaModalError() {
+            const pesan = document.getElementById('error-message');
+            const tableContainer = document.getElementById('error-table-container');
+
+            if (dataGagalImporTerakhir.length === 0) {
+                pesan.innerHTML = "✅ **Tidak ada data gagal impor** yang tercatat dari proses impor terakhir.";
+                pesan.style.color = 'var(--warna-primer)'; 
+                tableContainer.style.display = 'none';
+            } else {
+                pesan.innerHTML = `⚠️ Ditemukan **${dataGagalImporTerakhir.length} baris data gagal impor**.`;
+                pesan.style.color = 'var(--warna-danger)'; 
+                tampilkanDataGagalDiModal(dataGagalImporTerakhir);
+                tableContainer.style.display = 'block';
+            }
+
+            bukaModal('error');
+        }
+        
+        function tutupModal(jenis) { 
+            if (jenis === 'tambah') {
+                modalTambah.style.display = "none";
+            } else if (jenis === 'edit' && isModalEditOpen) {
+                simpanPerubahanOtomatis(); 
+                modalEdit.style.display = "none";
+                isModalEditOpen = false; 
+            } else if (jenis === 'salin') {
+                modalSalin.style.display = "none";
+            } else if (jenis === 'error') { 
+                modalError.style.display = "none";
+            }
+        }
+        
+        // Simpan otomatis saat klik di luar modal Edit
+        window.onclick = function(event) { 
+            if (event.target == modalTambah) { 
+                tutupModal('tambah'); 
+            } else if (event.target == modalEdit) { 
+                tutupModal('edit'); 
+            } else if (event.target == modalSalin) { 
+                tutupModal('salin'); 
+            } else if (event.target == modalError) { 
+                tutupModal('error'); 
+            }
+        }
+
+        // 2. Fungsi Tambah Data Manual (dengan Loading)
+        function tambahBuku() {
+            const getVal = (id) => document.getElementById(`input_tambah_${id}`).value.trim();
+            
+            const inputNoUrut = getVal('no_urut');
+            const inputNoInventaris = getVal('no_inventaris');
+            
+            if (!inputNoUrut) { alert("Nomor Urut wajib diisi!"); document.getElementById('input_tambah_no_urut').focus(); return; }
+            if (!inputNoInventaris) { alert("Nomor Inventaris wajib diisi!"); document.getElementById('input_tambah_no_inventaris').focus(); return; }
+            
+            const bukuBaru = {
+                no_urut: inputNoUrut, no_inventaris: inputNoInventaris,
+                tgl_diterima: getVal('tgl_diterima'), judul_buku: getVal('judul_buku'), pengarang: getVal('pengarang'),
+                asal_w: getVal('asal_w'), asal_h: getVal('asal_h'), asal_b: getVal('asal_b'), asal_ll: getVal('asal_ll'), asal_dari: getVal('asal_dari'),
+                jenis_u: getVal('jenis_u'), jenis_r: getVal('jenis_r'),
+                bhs_ing: getVal('bhs_ing'), bhs_arb: getVal('bhs_arb'), bhs_ind: getVal('bhs_ind'), bhs_ll: getVal('bhs_ll'),
+                harga_satuan: getVal('harga_satuan'), harga_jumlah: getVal('harga_jumlah'),
+                no_klasifikasi: getVal('no_klasifikasi')
+            };
+
+            showLoading("Menyimpan buku baru...");
+
+            refBuku.push(bukuBaru)
+                .then(() => { 
+                    hideLoading();
+                    alert("Data buku berhasil ditambahkan!"); 
+                    tutupModal('tambah'); 
+                })
+                .catch((error) => { 
+                    hideLoading();
+                    console.error("Error menambahkan buku: ", error); 
+                    alert("Gagal menambahkan data."); 
+                });
+        }
+        
+        // 3. Fungsi Edit Data (Otomatis Save) (dengan Loading)
+        function simpanPerubahanOtomatis() {
+            if (!isModalEditOpen) return;
+            
+            const key = document.getElementById('edit_key').value;
+            if (!key) return;
+
+            const getVal = (id) => document.getElementById(`input_edit_${id}`).value.trim();
+
+            const inputNoUrut = getVal('no_urut');
+            const inputNoInventaris = getVal('no_inventaris');
+            
+            if (!inputNoUrut || !inputNoInventaris) { 
+                alert("Nomor Urut dan Inventaris wajib diisi. Data tidak disimpan!"); 
+                modalEdit.style.display = "block";
+                return; 
+            }
+            
+            const bukuDiperbarui = {
+                no_urut: inputNoUrut, no_inventaris: inputNoInventaris,
+                tgl_diterima: getVal('tgl_diterima'), judul_buku: getVal('judul_buku'), pengarang: getVal('pengarang'),
+                asal_w: getVal('asal_w'), asal_h: getVal('asal_h'), asal_b: getVal('asal_b'), asal_ll: getVal('asal_ll'), asal_dari: getVal('asal_dari'),
+                jenis_u: getVal('jenis_u'), jenis_r: getVal('jenis_r'),
+                bhs_ing: getVal('bhs_ing'), bhs_arb: getVal('bhs_arb'), bhs_ind: getVal('bhs_ind'), bhs_ll: getVal('bhs_ll'),
+                harga_satuan: getVal('harga_satuan'), harga_jumlah: getVal('harga_jumlah'),
+                no_klasifikasi: getVal('no_klasifikasi')
+            };
+
+            showLoading("Menyimpan perubahan otomatis...");
+            
+            refBuku.child(key).update(bukuDiperbarui)
+                .then(() => { 
+                    console.log("Perubahan data buku berhasil disimpan otomatis."); 
+                    hideLoading();
+                })
+                .catch((error) => { 
+                    hideLoading();
+                    console.error("Error memperbarui buku: ", error); 
+                    alert("Gagal menyimpan perubahan otomatis."); 
+                });
+        }
+
+        // 4. Fungsi Hapus Baris Data (dari Modal) (dengan Loading)
+        function hapusBukuDariModal() {
+            const key = document.getElementById('edit_key').value;
+            if (key) {
+                if (confirm("Yakin ingin menghapus data ini secara permanen?")) {
+                    showLoading("Menghapus data...");
+                    refBuku.child(key).remove()
+                        .then(() => { 
+                            hideLoading();
+                            alert("Data berhasil dihapus!"); 
+                            modalEdit.style.display = "none";
+                            isModalEditOpen = false; 
+                        })
+                        .catch((error) => { 
+                            hideLoading();
+                            console.error("Error menghapus buku: ", error); 
+                            alert("Gagal menghapus data."); 
+                        });
+                }
+            }
+        }
+        
+        // 5. Fungsi Salin SEMUA Data (Header) (Sama)
+        function salinSemuaData(withHeader) {
+            tutupModal('salin'); 
+
+            if (semuaDataBuku.length === 0) { alert("Tidak ada data yang tersedia untuk disalin."); return; }
+            
+            let dataTeks = "";
+            const tab = '\t';
+            const newline = '\n';
+            
+            const headers = [
+                'No. Urut', 'No. Inventaris', 'Tanggal Diterima', 'Judul Buku', 'Pengarang', 
+                'Asal W.', 'Asal H.', 'Asal B.', 'Asal LL.', 'Asal Dari', 
+                'Jenis U.', 'Jenis R.', 
+                'Bhs Ing.', 'Bhs Arb.', 'Bhs Ind.', 'Bhs LL.', 
+                'Harga Satuan', 'Harga Jumlah', 'No. Klasifikasi'
+            ].join(tab);
+
+            if (withHeader) {
+                dataTeks += headers + newline;
+            }
+            
+            semuaDataBuku.forEach(buku => {
+                const dataBaris = [
+                    buku.no_urut || '', buku.no_inventaris || '', buku.tgl_diterima || '', buku.judul_buku || '', buku.pengarang || '', 
+                    buku.asal_w || '', buku.asal_h || '', buku.asal_b || '', buku.asal_ll || '', buku.asal_dari || '', 
+                    buku.jenis_u || '', buku.jenis_r || '', 
+                    buku.bhs_ing || '', buku.bhs_arb || '', buku.bhs_ind || '', buku.bhs_ll || '', 
+                    buku.harga_satuan || '', buku.harga_jumlah || '', buku.no_klasifikasi || ''
+                ].join(tab);
+                dataTeks += dataBaris + newline;
+            });
+            
+            navigator.clipboard.writeText(dataTeks).then(() => { 
+                const info = withHeader ? "Dengan Header" : "Tanpa Header";
+                alert(`✅ ${semuaDataBuku.length} baris data berhasil disalin ke clipboard! (${info})`); 
+            }).catch(err => { 
+                console.error('Gagal menyalin semua data: ', err); 
+                alert("❌ Gagal menyalin semua data."); 
+            });
+        }
+
+        // 6. Fungsi Hapus SEMUA Data (Header) (dengan Loading)
+        function hapusSemuaData() {
+            if (confirm("❗ PERINGATAN KERAS ❗\n\nAnda akan menghapus SEMUA data buku dari database. Aksi ini tidak dapat dibatalkan. Apakah Anda yakin ingin melanjutkan?")) {
+                showLoading("Menghapus SEMUA data...");
+                refBuku.remove()
+                    .then(() => { 
+                        hideLoading();
+                        alert("✅ SEMUA data berhasil dihapus dari database."); 
+                    })
+                    .catch((error) => { 
+                        hideLoading();
+                        console.error("Error menghapus semua data: ", error); 
+                        alert("❌ Gagal menghapus semua data."); 
+                    });
+            }
+        }
+        
+        // 7. Fungsi Impor Excel (DITINGKATKAN dengan Loading Bar dan Progress)
+        const EXCEL_COLUMN_MAP = {
+            0: 'no_urut', 1: 'no_inventaris', 2: 'tgl_diterima', 3: 'judul_buku', 4: 'pengarang', 5: 'asal_w', 6: 'asal_h', 7: 'asal_b', 8: 'asal_ll', 9: 'asal_dari', 10: 'jenis_u', 11: 'jenis_r', 12: 'bhs_ing', 13: 'bhs_arb', 14: 'bhs_ind', 15: 'bhs_ll', 16: 'harga_satuan', 17: 'harga_jumlah', 18: 'no_klasifikasi'
+        };
+
+        function imporDariExcel() {
+            document.getElementById('excel-file-input').click();
+        }
+
+        document.getElementById('excel-file-input').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            dataGagalImporTerakhir = []; 
+            showLoading("Membaca file Excel...", true); // Tampilkan loading dan Progress Bar!
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                
+                // Simulasikan progress pembacaan file
+                updateProgressBar(20, "Menganalisis data sheet..."); 
+                
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+
+                const excelData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                
+                // Hilangkan header baris pertama
+                const dataRows = excelData.slice(1);
+                const totalRows = dataRows.length;
+
+                updateProgressBar(40, `Menyiapkan ${totalRows} baris data...`);
+
+                let dataBerhasil = 0;
+                const updates = {};
+                
+                // --- PROSES VALIDASI DAN TRANSFORMASI DATA ---
+                dataRows.forEach((row, index) => {
+                    // Update progress setiap 100 baris atau di akhir
+                    if (index % 100 === 0 || index === totalRows - 1) {
+                        const percent = 40 + Math.floor((index / totalRows) * 30); // Hitungan 40% - 70%
+                        updateProgressBar(percent, `Memproses data baris ${index + 2} dari ${totalRows + 1}...`);
+                    }
+                    
+                    const dataObj = {};
+                    
+                    for (let i = 0; i < row.length; i++) {
+                        const key = EXCEL_COLUMN_MAP[i];
+                        if (key) {
+                            let value = row[i];
+                            dataObj[key] = (value !== undefined && value !== null) ? String(value).trim() : '';
+                        }
+                    }
+
+                    const noUrut = dataObj['no_urut'];
+                    const noInventaris = dataObj['no_inventaris'];
+                    let pesanError = '';
+
+                    if (!noUrut && !noInventaris) {
+                        pesanError = 'Nomor Urut dan Nomor Inventaris kosong.';
+                    } else if (!noUrut) {
+                        pesanError = 'Nomor Urut kosong.';
+                    } else if (!noInventaris) {
+                        pesanError = 'Nomor Inventaris kosong.';
+                    }
+
+                    if (pesanError) {
+                        dataGagalImporTerakhir.push({ 
+                            baris: index + 2, 
+                            error: pesanError,
+                            data: row.slice(0, 4).join(' | ') 
+                        });
+                        return; 
+                    }
+                    
+                    const newKey = refBuku.push().key; 
+                    updates['/' + newKey] = dataObj;
+                    dataBerhasil++;
+                });
+
+                updateProgressBar(70, `Selesai memproses ${totalRows} baris. Mulai sinkronisasi ke Firebase...`);
+
+                if (dataBerhasil > 0) {
+                    // --- PROSES SINKRONISASI FIREBASE ---
+                    refBuku.update(updates)
+                        .then(() => {
+                            updateProgressBar(100, "Sinkronisasi selesai!"); 
+                            // Beri jeda sebentar agar user melihat 100%
+                            setTimeout(() => {
+                                hideLoading(); 
+                                let alertMsg = `✅ Impor selesai!\nBerhasil: ${dataBerhasil} baris.`;
+                                if (dataGagalImporTerakhir.length > 0) {
+                                    alertMsg += `\nGagal: ${dataGagalImporTerakhir.length} baris. Klik tombol ⚠️ untuk melihat detailnya.`;
+                                }
+                                alert(alertMsg);
+                            }, 500);
+                        })
+                        .catch((error) => {
+                            hideLoading(); 
+                            console.error("Error impor batch: ", error);
+                            alert("❌ Gagal menyimpan data impor ke Firebase.");
+                        });
+                } else if (dataGagalImporTerakhir.length > 0) {
+                     updateProgressBar(100, "Tidak ada data berhasil disimpan, hanya data gagal.");
+                     setTimeout(() => {
+                         hideLoading(); 
+                         alert(`Impor selesai. Tidak ada data yang berhasil disimpan. Gagal: ${dataGagalImporTerakhir.length} baris. Klik tombol ⚠️ untuk melihat detailnya.`);
+                     }, 500);
+                } else {
+                    hideLoading(); 
+                    alert("Tidak ada data yang ditemukan di file Excel.");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Menampilkan data gagal di dalam modal
+        function tampilkanDataGagalDiModal(dataGagalArray) {
+            dataGagalTbody.innerHTML = '';
+            dataGagalArray.forEach(item => {
+                const row = dataGagalTbody.insertRow();
+                row.insertCell().textContent = item.baris;
+                row.insertCell().textContent = item.error;
+                row.insertCell().textContent = item.data;
+            });
+        }
+        
+        // 8. Fungsi Pencarian (Sama)
+        inputPencarian.addEventListener('keyup', () => {
+            tampilkanDataBuku(inputPencarian.value.toLowerCase());
+        });
+
+        // 9. Membaca dan Menampilkan Data (dengan Loading)
+        showLoading("Memuat data dari database..."); 
+        refBuku.on('value', (snapshot) => {
+            semuaDataBuku = []; 
+            snapshot.forEach((childSnapshot) => {
+                const key = childSnapshot.key;
+                const buku = childSnapshot.val();
+                semuaDataBuku.push({ key, ...buku }); 
+            });
+            tampilkanDataBuku(inputPencarian.value.toLowerCase());
+            hideLoading(); 
+        }, (error) => {
+            console.error("Error membaca data: ", error);
+            hideLoading(); 
+        });
+
+        // Fungsi Tampilan Data dengan Filter (Sama)
+        function tampilkanDataBuku(filterTeks = '') {
+            dataBukuTbody.innerHTML = '';
+            const dataTerfilter = semuaDataBuku.filter(buku => {
+                const searchString = `${buku.no_urut} ${buku.no_inventaris} ${buku.judul_buku} ${buku.pengarang} ${buku.no_klasifikasi}`.toLowerCase();
+                return searchString.includes(filterTeks);
+            });
+            
+            if (dataTerfilter.length === 0) {
+                const row = dataBukuTbody.insertRow();
+                row.insertCell().colSpan = 19; 
+                row.cells[0].textContent = filterTeks ? `Tidak ada data yang cocok dengan pencarian: "${filterTeks}"` : "Belum ada data buku.";
+                row.cells[0].style.textAlign = "center";
+                return;
+            }
+
+            dataTerfilter.forEach((buku) => {
+                const row = dataBukuTbody.insertRow();
+                
+                // Tambahkan event listener saat baris diklik
+                row.onclick = () => bukaModal('edit', buku.key, buku);
+                
+                // 18 Kolom Data + 1 Kolom Aksi tersembunyi
+                row.insertCell().textContent = buku.no_urut || ''; row.insertCell().textContent = buku.no_inventaris || ''; 
+                row.insertCell().textContent = buku.tgl_diterima || ''; 
+                row.insertCell().className = 'col-judul'; row.cells[3].textContent = buku.judul_buku || ''; 
+                row.insertCell().className = 'col-pengarang'; row.cells[4].textContent = buku.pengarang || ''; 
+                row.insertCell().textContent = buku.asal_w || ''; row.insertCell().textContent = buku.asal_h || ''; 
+                row.insertCell().textContent = buku.asal_b || ''; row.insertCell().textContent = buku.asal_ll || ''; 
+                row.insertCell().textContent = buku.asal_dari || ''; row.insertCell().textContent = buku.jenis_u || ''; 
+                row.insertCell().textContent = buku.jenis_r || ''; row.insertCell().textContent = buku.bhs_ing || ''; 
+                row.insertCell().textContent = buku.bhs_arb || ''; row.insertCell().textContent = buku.bhs_ind || ''; 
+                row.insertCell().textContent = buku.bhs_ll || ''; row.insertCell().textContent = buku.harga_satuan || ''; 
+                row.insertCell().textContent = buku.harga_jumlah || ''; row.insertCell().textContent = buku.no_klasifikasi || '';
+                
+                // Sel untuk Kolom Aksi yang disembunyikan via CSS
+                row.insertCell(); 
+            });
+        }
+    </script>
+
+</body>
+</html>

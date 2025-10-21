@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistem Lokasi Rak - Perpustakaan Lubangsa</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.4/xlsx.full.min.js"></script> 
+    
+    <style>
+        /* --- Tema Umum (Aksen Tunggal: #00796B) --- */
+        :root {
+            --warna-dasar: #f4f7f6; 
+            --warna-primer: #00796B; /* Teal */
+            --warna-teks: #212121;
+            --radius-halus: 8px; 
+            --bayangan-halus: 0 4px 12px rgba(0, 0, 0, 0.1);
+            --warna-danger: #D32F2F; 
+        }
+
+        body { 
+            font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background-color: var(--warna-dasar); 
+            color: var(--warna-teks);
+        }
+
+        .container {
+            max-width: 1500px;
+            margin: 20px auto 20px auto; 
+            position: relative; 
+        }
+        
+        h1 { display: none; }
+        
+        /* --- FIXED HEADER & NAVIGASI --- */
+        .fixed-header-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            z-index: 500;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-sizing: border-box;
+        }
+
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--warna-primer);
+            margin-left: 20px; 
+        }
+        
+        .tab-nav {
+            display: flex;
+        }
+
+        .tab-button {
+            padding: 15px;
+            cursor: pointer;
+            font-size: 20px;
+            font-weight: 600;
+            border: none;
+            background-color: transparent;
+            color: #999;
+            transition: color 0.3s;
+            border-radius: var(--radius-halus);
+            margin-left: 5px;
+        }
+
+        .tab-button span { display: none; }
+
+        .tab-button.active, .tab-button:hover {
+            color: var(--warna-primer);
+            background-color: #e0f2f1; 
+        }
+        .tab-button.active {
+            border-bottom: 3px solid var(--warna-primer);
+            padding-bottom: 12px;
+        }
+
+        .tab-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: var(--radius-halus);
+            box-shadow: var(--bayangan-halus);
+            min-height: 600px;
+            margin-top: 80px; 
+        }
+        
+        /* Kontainer untuk Judul dan Tombol Sebaris */
+        .tab-header-with-button {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eee;
+        }
+        
+        /* Gaya untuk Judul di Dalam Tab */
+        .tab-content h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--warna-teks);
+            margin-top: 0;
+            margin-bottom: 0; 
+            padding-bottom: 0; 
+            border-bottom: none;
+        }
+
+        .header-controls, #laporan h2, #laporan p, #total-data-info {
+            display: none;
+        }
+
+        /* --- Gaya Tombol Aksi --- */
+        .tombol-aksi {
+            padding: 10px 18px;
+            border: none;
+            background-color: var(--warna-primer);
+            color: white;
+            border-radius: 6px;
+            font-size: 14px; /* Dikecilkan agar pas di header */
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.2s;
+            white-space: nowrap; /* Mencegah tombol putus baris */
+        }
+        .tombol-aksi:hover { background-color: #004d40; }
+
+
+        /* --- Gaya Tabel Laporan Lokasi --- */
+        #loading-lokasi {
+            text-align: center;
+            font-size: 18px;
+            color: var(--warna-primer);
+            padding: 50px;
+        }
+        .table-wrapper {
+            overflow-x: auto; 
+            margin-top: 0;
+        }
+        table { 
+            border-collapse: collapse; 
+            table-layout: fixed; 
+            width: 100%; 
+            min-width: 1100px; /* Lebar minimum disesuaikan dengan kolom tambahan */
+            box-shadow: none; 
+            background-color: white;
+            border-radius: var(--radius-halus);
+            overflow: hidden;
+        }
+        th { 
+            padding: 12px 8px; 
+            font-size: 14px; 
+            background-color: var(--warna-primer); 
+            color: white; 
+            font-weight: 700; 
+            text-align: center; 
+            vertical-align: middle;
+            white-space: nowrap; 
+        }
+        td { 
+            border: 1px solid #eeeeee; 
+            padding: 8px; 
+            text-align: center; 
+            font-size: 13px; 
+            height: 40px; 
+            vertical-align: middle;
+        }
+        #tabelLokasi tbody tr:nth-child(even) { background-color: #f7f7f7; }
+        .col-lokasi-blok, .col-lokasi-rak { font-weight: 700; font-size: 16px; color: var(--warna-primer); }
+        .col-judul { text-align: left; }
+        .col-pengarang { text-align: left; }
+        
+        .hidden-col { display: none !important; }
+
+        /* --- Gaya Tab Manajemen Aturan --- */
+        #manajemen h2, #manajemen p { display: none; }
+        #dataAturan tr { cursor: pointer; }
+        #dataAturan tr:hover { background-color: #e0f2f1; }
+        
+        /* --- Modal/Pop-up Styles (Tidak Berubah) --- */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.6);
+            padding-top: 50px;
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 30px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 800px;
+            border-radius: var(--radius-halus);
+            box-shadow: var(--bayangan-halus);
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .modal-content h3 {
+            color: var(--warna-primer);
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+
+        .form-aturan-modal {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+        }
+        .form-aturan-modal .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-aturan-modal label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: var(--warna-primer); 
+            font-size: 14px;
+        }
+        .form-aturan-modal input { 
+            padding: 10px; 
+            width: 100%; 
+            box-sizing: border-box; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            font-size: 16px;
+        }
+        .form-aturan-modal input:focus {
+            border-color: var(--warna-primer);
+            outline: none;
+        }
+
+        .modal-footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        .modal-footer button {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        #tombol-simpan-modal {
+            background-color: var(--warna-primer);
+            color: white;
+            border: none;
+        }
+        #tombol-simpan-modal:hover { background-color: #004d40; }
+
+        #tombol-hapus-modal {
+            background-color: var(--warna-danger);
+            color: white;
+            border: none;
+        }
+        #tombol-hapus-modal:hover { background-color: #a93226; }
+
+        #tombol-batal-modal {
+            background-color: #eee;
+            color: var(--warna-teks);
+            border: 1px solid #ccc;
+        }
+        #tombol-batal-modal:hover { background-color: #ddd; }
+
+    </style>
+</head>
+<body>
+
+    <div class="fixed-header-nav">
+        <div class="header-title">Data Buku Keseluruhan</div>
+        
+        <div class="tab-nav">
+            <button class="tab-button" onclick="bukaTab('laporan')" title="Laporan Lokasi Buku"><i class="fas fa-table"></i><span> Laporan</span></button>
+            <button class="tab-button" onclick="bukaTab('manajemen')" title="Manajemen Aturan Rak"><i class="fas fa-tools"></i><span> Manajemen</span></button>
+        </div>
+    </div>
+    <div class="container">
+        <div id="laporan" class="tab-content">
+            
+            <div class="tab-header-with-button">
+                <h3>Laporan Lokasi Buku Berdasarkan Aturan Pemetaan</h3>
+                <button class="tombol-aksi" id="tombol-salin-laporan" onclick="salinDataTabel()"><i class="fas fa-copy"></i> Salin Semua Data</button>
+            </div>
+
+            <div id="loading-lokasi"><i class="fas fa-spinner fa-spin"></i> Memuat data dan aturan...</div>
+
+            <div class="table-wrapper">
+                <table id="tabelLokasi" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th style="width: 5%;">No.</th>
+                            <th style="width: 5%;">Blok</th>
+                            <th style="width: 5%;">Rak</th>
+                            <th style="width: 30%;" class="col-judul">Judul Buku</th>
+                            <th style="width: 20%;" class="col-pengarang">Pengarang</th>
+                            <th style="width: 15%;">No. Inventaris</th>
+                            <th style="width: 20%;">No. Klasifikasi</th> <th class="hidden-col">No. Urut</th>
+                            <th class="hidden-col">Nama Rak</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataLokasiBuku">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="manajemen" class="tab-content" style="display: none;">
+            
+            <div class="tab-header-with-button">
+                <h3>Daftar Aturan Pemetaan Rak (Blok & Rak)</h3>
+                 <button class="tombol-aksi" onclick="bukaModal('tambah')"><i class="fas fa-plus-circle"></i> Tambah Aturan Baru</button>
+            </div>
+            
+            <div class="table-wrapper">
+                <table id="tabelAturan">
+                    <thead>
+                        <tr>
+                            <th style="width: 5%;">BLOK</th>
+                            <th style="width: 5%;">RAK</th>
+                            <th style="width: 25%;">NAMA RAK</th>
+                            <th style="width: 20%;">Klasifikasi Range</th>
+                            <th style="width: 20%;">Kode Pengarang Range</th>
+                            <th style="width: 20%;">Kondisi</th>
+                            <th style="width: 5%;" class="col-aksi"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataAturan">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalAturan" class="modal">
+        <div class="modal-content">
+            <h3 id="modal-title">Tambah Aturan Baru</h3>
+
+            <form id="formAturan" class="form-aturan-modal">
+                <input type="hidden" id="modal_key">
+                
+                <div class="input-group">
+                    <label>BLOK (1 Huruf):</label>
+                    <input type="text" id="modal_blok" placeholder="e.g., A, B, D..." maxlength="1">
+                </div>
+                
+                <div class="input-group">
+                    <label>RAK (2 Digit):</label>
+                    <input type="text" id="modal_rak" placeholder="e.g., 01, 02..." maxlength="2">
+                </div>
+                
+                <div class="input-group">
+                    <label>NAMA RAK:</label>
+                    <input type="text" id="modal_nama_rak" placeholder="e.g., Filsafat dan Psikologi">
+                </div>
+
+                <div class="input-group">
+                    <label>Klasifikasi MIN:</label>
+                    <input type="number" id="modal_klasifikasi_min" placeholder="e.g., 100.0" step="any">
+                </div>
+                
+                <div class="input-group">
+                    <label>Klasifikasi MAX:</label>
+                    <input type="number" id="modal_klasifikasi_max" placeholder="e.g., 121.0" step="any">
+                </div>
+
+                <div class="input-group">
+                    <label>Kode Pengarang MIN (3 Huruf):</label>
+                    <input type="text" id="modal_kode_pengarang_min" placeholder="e.g., MUH" maxlength="3">
+                </div>
+                
+                <div class="input-group">
+                    <label>Kode Pengarang MAX (3 Huruf):</label>
+                    <input type="text" id="modal_kode_pengarang_max" placeholder="e.g., MOH" maxlength="3">
+                </div>
+            </form>
+
+            <div class="modal-footer">
+                <div id="modal-hapus-area">
+                    <button id="tombol-hapus-modal" onclick="hapusAturanModal()"><i class="fas fa-trash-alt"></i> Hapus</button>
+                </div>
+                <div>
+                    <button id="tombol-batal-modal" onclick="tutupModal()">Batalkan</button>
+                    <button id="tombol-simpan-modal" onclick="simpanAturanModal()"><i class="fas fa-save"></i> Simpan Perubahan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // PASTIKAN ANDA MENGGANTI INI DENGAN KONFIGURASI FIREBASE ANDA SENDIRI
+        const firebaseConfig = {
+            apiKey: "AIzaSyC6MLSFGBeutysEL5kG3nO7-92pKw-AX34",
+            authDomain: "basisdata-ef1d8.firebaseapp.com",
+            databaseURL: "https://basisdata-ef1d8-default-rtdb.firebaseio.com",
+            projectId: "basisdata-ef1d8",
+            storageBucket: "basisdata-ef1d8.firebasestorage.app",
+            messagingSenderId: "368595611137",
+            appId: "1:368595611137:web:6cd13a5b109d3fbfca5a00"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const refBuku = database.ref('buku_final_v2'); 
+        const refAturan = database.ref('aturan_rak'); 
+        
+        // Elemen DOM
+        const dataLokasiBukuTbody = document.getElementById('dataLokasiBuku');
+        const loadingLokasi = document.getElementById('loading-lokasi');
+        const tabelLokasiElement = document.getElementById('tabelLokasi');
+        const dataAturanTbody = document.getElementById('dataAturan');
+        const modalAturan = document.getElementById('modalAturan');
+        const modalTitle = document.getElementById('modal-title');
+        const modalHapusArea = document.getElementById('modal-hapus-area');
+
+        let dataLengkapDenganLokasi = [];
+        let aturanRakGlobal = []; 
+
+        // -----------------------------------------------------
+        // FUNGSI UTAMA: PENGELOLAAN TAB
+        // -----------------------------------------------------
+        function bukaTab(tabName) {
+            const contents = document.querySelectorAll('.tab-content');
+            const buttons = document.querySelectorAll('.tab-button');
+            contents.forEach(content => content.style.display = 'none');
+            buttons.forEach(button => button.classList.remove('active'));
+
+            document.getElementById(tabName).style.display = 'block';
+            document.querySelector(`.tab-button[onclick="bukaTab('${tabName}')"]`).classList.add('active');
+
+            if (tabName === 'laporan') {
+                muatDataDanTampilkanLokasi();
+            } 
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            muatAturan().then(() => {
+                bukaTab('laporan'); 
+            });
+            window.onclick = function(event) {
+                if (event.target == modalAturan) {
+                    tutupModal();
+                }
+            }
+        });
+
+
+        // -----------------------------------------------------
+        // BAGIAN 1: LOGIKA PENENTUAN RAK
+        // -----------------------------------------------------
+        
+        function muatAturan() {
+            return new Promise((resolve) => {
+                refAturan.once('value', (snapshot) => {
+                    aturanRakGlobal = [];
+                    snapshot.forEach((childSnapshot) => {
+                        aturanRakGlobal.push({ key: childSnapshot.key, ...childSnapshot.val() });
+                    });
+                    resolve();
+                }, (error) => {
+                    console.error("Gagal memuat aturan rak: ", error);
+                    resolve();
+                });
+            });
+        }
+        
+        function tentukanRak(klasifikasi, pengarang) {
+            const cleanKlas = parseFloat(String(klasifikasi).replace(/[^\d.]/g, '') || 0);
+            const cleanPengarang = String(pengarang).substring(0, 3).toUpperCase(); 
+
+            for (const aturan of aturanRakGlobal) {
+                let isKlasifikasiMatch = true;
+                let isPengarangMatch = true;
+
+                if (aturan.klasifikasi_min) {
+                    const min = parseFloat(aturan.klasifikasi_min);
+                    const max = parseFloat(aturan.klasifikasi_max || 999.99); 
+                    if (cleanKlas < min || cleanKlas > max) isKlasifikasiMatch = false;
+                }
+
+                if (aturan.pengarang_min) {
+                    const minPeng = aturan.pengarang_min.toUpperCase();
+                    const maxPeng = (aturan.pengarang_max || 'ZZZ').toUpperCase(); 
+                    if (cleanPengarang < minPeng || cleanPengarang > maxPeng) isPengarangMatch = false;
+                }
+                
+                if ((!aturan.klasifikasi_min || isKlasifikasiMatch) && (!aturan.pengarang_min || isPengarangMatch)) {
+                    
+                    if (aturan.klasifikasi_min && aturan.pengarang_min) {
+                         if (isKlasifikasiMatch && isPengarangMatch) {
+                             return { blok: aturan.blok, rak: aturan.rak, nama_rak: aturan.nama_rak, keterangan: `Klasifikasi ${klasifikasi} DAN Pengarang ${cleanPengarang}` };
+                         }
+                    } 
+                    else if (isKlasifikasiMatch && isPengarangMatch) {
+                        let kondisi = '';
+                        if (aturan.klasifikasi_min) kondisi = `Klasifikasi: ${klasifikasi}`;
+                        else if (aturan.pengarang_min) kondisi = `Pengarang: ${cleanPengarang}`;
+                        
+                        return { blok: aturan.blok, rak: aturan.rak, nama_rak: aturan.nama_rak, keterangan: kondisi };
+                    }
+                }
+            }
+            
+            return { blok: "X", rak: "99", nama_rak: "Tidak Terdefinisi", keterangan: "Tidak ada aturan pemetaan yang cocok." }; 
+        }
+
+        // -----------------------------------------------------
+        // BAGIAN 2: LOGIKA LAPORAN LOKASI BUKU (TAB 1)
+        // -----------------------------------------------------
+        
+        function muatDataDanTampilkanLokasi() {
+            loadingLokasi.style.display = 'block';
+            tabelLokasiElement.style.display = 'none';
+            dataLokasiBukuTbody.innerHTML = '';
+            dataLengkapDenganLokasi = [];
+
+            muatAturan().then(() => {
+                refBuku.once('value', (snapshot) => {
+                    let nomorUrutTabel = 1;
+                    snapshot.forEach((childSnapshot) => {
+                        const buku = childSnapshot.val();
+                        const klasifikasi = buku.no_klasifikasi || '';
+                        const pengarang = buku.pengarang || '';
+
+                        const lokasi = tentukanRak(klasifikasi, pengarang);
+                        
+                        const dataBaris = {
+                            no: nomorUrutTabel++,
+                            no_urut: buku.no_urut || '',
+                            no_inventaris: buku.no_inventaris || '',
+                            judul_buku: buku.judul_buku || 'TANPA JUDUL',
+                            pengarang: buku.pengarang || '-', 
+                            no_klasifikasi: klasifikasi,
+                            lokasi_blok: lokasi.blok,
+                            lokasi_rak: lokasi.rak,
+                            nama_rak: lokasi.nama_rak, 
+                            keterangan: lokasi.keterangan
+                        };
+
+                        dataLengkapDenganLokasi.push(dataBaris);
+                    });
+                    
+                    dataLengkapDenganLokasi.sort((a, b) => {
+                        if (a.lokasi_blok < b.lokasi_blok) return -1;
+                        if (a.lokasi_blok > b.lokasi_blok) return 1;
+                        const rakA = parseInt(a.lokasi_rak);
+                        const rakB = parseInt(b.lokasi_rak);
+                        return rakA - rakB;
+                    });
+                    
+                    tampilkanTabelLokasi(dataLengkapDenganLokasi);
+
+                }, (error) => {
+                    loadingLokasi.innerHTML = `<i class="fas fa-times-circle" style="color: var(--warna-danger);"></i> Gagal memuat data buku: ${error.message}`;
+                });
+            });
+        }
+        
+        function tampilkanTabelLokasi(data) {
+            dataLokasiBukuTbody.innerHTML = '';
+            
+            if (data.length === 0) {
+                loadingLokasi.innerHTML = "Tidak ada data buku yang ditemukan.";
+                loadingLokasi.style.display = 'block';
+                return;
+            }
+
+            data.forEach((item, index) => { 
+                const row = dataLokasiBukuTbody.insertRow();
+                
+                // 7 KOLOM TERLIHAT
+                row.insertCell().textContent = index + 1; // 0: No
+                
+                const blokCell = row.insertCell(); // 1: Blok
+                blokCell.className = 'col-lokasi-blok';
+                blokCell.textContent = item.lokasi_blok; 
+                
+                const rakCell = row.insertCell(); // 2: Rak
+                rakCell.className = 'col-lokasi-rak';
+                rakCell.textContent = item.lokasi_rak; 
+                
+                row.insertCell().className = 'col-judul'; row.cells[3].textContent = item.judul_buku; // 3: Judul Buku
+                row.insertCell().className = 'col-pengarang'; row.cells[4].textContent = item.pengarang; // 4: Pengarang
+                row.insertCell().textContent = item.no_inventaris; // 5: No. Inventaris
+                
+                row.insertCell().textContent = item.no_klasifikasi; // 6: No. Klasifikasi (KOLOM BARU TERLIHAT)
+                
+                // 2 KOLOM TERSEMBUNYI
+                row.insertCell().className = 'hidden-col'; row.cells[7].textContent = item.no_urut; // 7: No. Urut
+                row.insertCell().className = 'hidden-col'; row.cells[8].textContent = item.nama_rak || item.keterangan; // 8: Nama Rak
+            });
+            
+            loadingLokasi.style.display = 'none';
+            tabelLokasiElement.style.display = 'table';
+        }
+        
+        /**
+         * Fungsi untuk menyalin data dari dataLengkapDenganLokasi ke clipboard
+         * dalam format TSV (Tab-Separated Values).
+         */
+        function salinDataTabel() {
+            const dataToCopy = dataLengkapDenganLokasi;
+            if (dataToCopy.length === 0) {
+                alert("Tidak ada data untuk disalin.");
+                return;
+            }
+
+            // 1. Buat header
+            let content = "No\tBlok\tRak\tJudul Buku\tPengarang\tNo. Inventaris\tNo. Klasifikasi\n";
+            
+            // 2. Tambahkan baris data
+            dataToCopy.forEach((item, index) => {
+                // Hapus karakter tab ('\t') dalam data agar tidak merusak format TSV
+                const row = [
+                    index + 1,
+                    item.lokasi_blok,
+                    item.lokasi_rak,
+                    item.judul_buku.replace(/\t/g, ' '), 
+                    item.pengarang.replace(/\t/g, ' '), 
+                    item.no_inventaris,
+                    item.no_klasifikasi // Ditambahkan ke konten yang disalin
+                ].join('\t');
+                content += row + '\n';
+            });
+
+            // 3. Salin ke clipboard menggunakan API modern
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(content).then(() => {
+                    alert(`✅ ${dataToCopy.length} baris data berhasil disalin ke clipboard!\nAnda dapat menempelkannya di Excel, Google Sheets, atau aplikasi spreadsheet lainnya.`);
+                }).catch(err => {
+                    console.error('Gagal menyalin data: ', err);
+                    alert('❌ Gagal menyalin data ke clipboard. Silakan coba salin secara manual.');
+                });
+            } else {
+                // Fallback for older browsers (not reliable in all contexts)
+                const textarea = document.createElement('textarea');
+                textarea.value = content;
+                textarea.style.position = 'fixed'; // Agar tidak terlihat dan tidak mengganggu layout
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    alert(`✅ ${dataToCopy.length} baris data berhasil disalin ke clipboard (Fallback method)!`);
+                } catch (err) {
+                    console.error('Fallback copy failed: ', err);
+                    alert('❌ Gagal menyalin data. Browser Anda tidak mendukung Clipboard API atau perintah copy.');
+                }
+                document.body.removeChild(textarea);
+            }
+        }
+
+
+        // -----------------------------------------------------
+        // BAGIAN 3: LOGIKA MANAJEMEN ATURAN (TAB 2)
+        // -----------------------------------------------------
+
+        function tutupModal() {
+            modalAturan.style.display = 'none';
+            document.getElementById('formAturan').reset();
+        }
+
+        function bukaModal(mode, aturanData = null) {
+            modalAturan.style.display = 'block';
+            modalHapusArea.style.display = 'none';
+            
+            const inputs = document.querySelectorAll('.form-aturan-modal input');
+            inputs.forEach(input => input.value = '');
+
+            if (mode === 'tambah') {
+                modalTitle.textContent = 'Tambah Aturan Baru';
+                document.getElementById('modal_key').value = '';
+                document.getElementById('tombol-simpan-modal').textContent = 'Tambah Aturan';
+                modalHapusArea.style.display = 'none';
+            } else if (mode === 'edit' && aturanData) {
+                modalTitle.textContent = 'Edit Aturan';
+                document.getElementById('modal_key').value = aturanData.key;
+                document.getElementById('modal_blok').value = aturanData.blok || '';
+                document.getElementById('modal_rak').value = aturanData.rak || '';
+                document.getElementById('modal_nama_rak').value = aturanData.nama_rak || '';
+                document.getElementById('modal_klasifikasi_min').value = aturanData.klasifikasi_min || '';
+                document.getElementById('modal_klasifikasi_max').value = aturanData.klasifikasi_max || '';
+                document.getElementById('modal_kode_pengarang_min').value = aturanData.pengarang_min || '';
+                document.getElementById('modal_kode_pengarang_max').value = aturanData.pengarang_max || '';
+                document.getElementById('tombol-simpan-modal').textContent = 'Simpan Perubahan';
+                modalHapusArea.style.display = 'block';
+            }
+        }
+
+        function simpanAturanModal() {
+            const key = document.getElementById('modal_key').value;
+            const getVal = (id) => document.getElementById(`modal_${id}`).value.trim();
+            
+            const blok = getVal('blok').toUpperCase();
+            const rak = getVal('rak').padStart(2, '0');
+            const namaRak = getVal('nama_rak'); 
+            const klasifikasiMin = getVal('klasifikasi_min');
+            const klasifikasiMax = getVal('klasifikasi_max');
+            const pengarangMin = getVal('kode_pengarang_min').toUpperCase();
+            const pengarangMax = getVal('kode_pengarang_max').toUpperCase();
+
+            if (!blok || !rak || !namaRak) { 
+                alert("Blok, Rak, dan Nama Rak wajib diisi.");
+                return;
+            }
+            if (rak.length !== 2) {
+                alert("RAK harus berupa 2 digit (e.g., 01, 10).");
+                return;
+            }
+            if (!klasifikasiMin && !pengarangMin) {
+                 alert("Setidaknya salah satu dari Klasifikasi MIN atau Kode Pengarang MIN harus diisi.");
+                return;
+            }
+
+            const dataAturan = {
+                blok: blok,
+                rak: rak,
+                nama_rak: namaRak, 
+                klasifikasi_min: klasifikasiMin || null, 
+                klasifikasi_max: klasifikasiMax || null,
+                pengarang_min: pengarangMin || null,
+                pengarang_max: pengarangMax || null,
+            };
+
+            const ref = key ? refAturan.child(key) : refAturan.push();
+            ref.set(dataAturan)
+                .then(() => { 
+                    alert(`✅ Aturan berhasil di${key ? 'ubah' : 'tambahkan'}!`); 
+                    tutupModal();
+                    muatAturan(); 
+                })
+                .catch((error) => { 
+                    console.error("Error menyimpan aturan: ", error); 
+                    alert("❌ Gagal menyimpan aturan."); 
+                });
+        }
+        
+        function hapusAturanModal() {
+            const key = document.getElementById('modal_key').value;
+            if (!key) return;
+
+            if (confirm("Yakin ingin menghapus aturan pemetaan ini?")) {
+                refAturan.child(key).remove()
+                    .then(() => { 
+                        alert("✅ Aturan berhasil dihapus!"); 
+                        tutupModal();
+                        muatAturan(); 
+                    })
+                    .catch((error) => { 
+                        console.error("Error menghapus aturan: ", error); 
+                        alert("❌ Gagal menghapus aturan."); 
+                    });
+            }
+        }
+
+        // Listener real-time untuk tabel Manajemen Aturan
+        refAturan.on('value', (snapshot) => {
+            dataAturanTbody.innerHTML = '';
+            const aturanArray = [];
+            
+            snapshot.forEach((childSnapshot) => {
+                const key = childSnapshot.key;
+                const aturan = childSnapshot.val();
+                aturanArray.push({ key, ...aturan });
+            });
+            
+            aturanArray.sort((a, b) => {
+                if (a.blok < b.blok) return -1;
+                if (a.blok > b.blok) return 1;
+                if (a.rak < b.rak) return -1;
+                if (a.rak > b.rak) return 1;
+                return 0;
+            });
+
+            aturanArray.forEach((aturan) => {
+                const row = dataAturanTbody.insertRow();
+                
+                const klasifikasiRange = (aturan.klasifikasi_min || '') + (aturan.klasifikasi_min && aturan.klasifikasi_max ? ' - ' : '') + (aturan.klasifikasi_max || '');
+                const pengarangRange = (aturan.pengarang_min || '') + (aturan.pengarang_min && aturan.pengarang_max ? ' - ' : '') + (aturan.pengarang_max || '');
+                
+                let kondisi = '';
+                if(klasifikasiRange) kondisi += `Klasifikasi`;
+                if(klasifikasiRange && pengarangRange) kondisi += ' & ';
+                if(pengarangRange) kondisi += `Pengarang`;
+
+
+                row.insertCell().textContent = aturan.blok;
+                row.insertCell().textContent = aturan.rak;
+                row.insertCell().className = 'col-judul-lokasi'; row.cells[2].textContent = aturan.nama_rak || '-';
+                row.insertCell().textContent = klasifikasiRange || '-';
+                row.insertCell().textContent = pengarangRange || '-';
+                row.insertCell().textContent = kondisi || '-';
+                
+                const aksiCell = row.insertCell();
+                aksiCell.className = 'col-aksi';
+                aksiCell.textContent = '';
+                
+                row.onclick = () => bukaModal('edit', aturan);
+
+            });
+            
+            if (aturanArray.length === 0) {
+                const row = dataAturanTbody.insertRow();
+                row.insertCell().colSpan = 7;
+                row.cells[0].textContent = "Belum ada aturan pemetaan rak yang ditambahkan. Klik tombol 'Tambah Aturan Baru' di atas.";
+                row.cells[0].style.textAlign = "center";
+            }
+            
+        }, (error) => {
+            console.error("Error membaca aturan rak: ", error);
+        });
+    </script>
+
+</body>
+</html>

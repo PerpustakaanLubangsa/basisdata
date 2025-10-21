@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Inventaris: Masuk & Utama</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <style>
+        /* Variabel Warna */
+        :root {
+            --accent-color: #00796B; /* Hijau Tua */
+            --dark-color: #004d40;   
+            --text-color: #ffffff;
+            --background-color: #f4f4f4;
+        }
+
+        /* PENTING: Mencegah Scroll pada Halaman Utama */
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden; /* Mencegah munculnya scroll bar pada body */
+            font-family: Arial, sans-serif;
+        }
+
+        /* --- Gaya Halaman Login --- */
+        #login-page {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh; /* Tinggi penuh viewport */
+            background-color: var(--background-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .login-box {
+            background: var(--text-color);
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            text-align: center;
+        }
+
+        .login-box h2 {
+            color: var(--dark-color);
+            margin-bottom: 20px;
+        }
+
+        .login-box input[type="password"] {
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 200px;
+            font-size: 16px;
+        }
+
+        .login-box button {
+            background-color: var(--accent-color);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        .login-box button:hover {
+            background-color: var(--dark-color);
+        }
+
+        /* --- Gaya Konten Utama (Setelah Login) --- */
+        
+        #main-content {
+            display: none; 
+            width: 100%;
+            height: 100vh; /* Tinggi penuh viewport */
+            flex-direction: row;
+        }
+        
+        /* Gaya untuk Sidebar Kiri (Sangat Kecil) */
+        .sidebar {
+            width: 30px; 
+            background-color: var(--dark-color); 
+            color: var(--text-color);
+            padding-top: 5px; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 1px 0 5px rgba(0, 0, 0, 0.2);
+            height: 100%; /* Penting: Tinggi penuh sidebar */
+            overflow: hidden; /* Mencegah scroll pada sidebar */
+        }
+
+        .nav-icon {
+            display: block;
+            margin-bottom: 10px;
+            padding: 5px;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.3s, color 0.3s;
+            border-radius: 4px;
+            text-decoration: none;
+            color: var(--text-color);
+            font-size: 10px; 
+            width: 100%;
+        }
+
+        .nav-icon:hover,
+        .nav-icon.active {
+            background-color: var(--accent-color); 
+            box-shadow: 0 0 5px rgba(0, 121, 107, 0.5);
+        }
+
+        /* Gaya untuk Area Konten Utama (Iframe) */
+        .content-area {
+            flex-grow: 1;
+            padding: 0;
+            background-color: var(--background-color);
+            height: 100%; /* Penting: Tinggi penuh konten area */
+            overflow: hidden; /* Konten iframe yang akan discroll, bukan area ini */
+        }
+
+        #main-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="login-page">
+        <div class="login-box">
+            <h2>Selamat Datang, Basis Data.</h2>
+            <input type="password" id="password-input" placeholder="Masukkan Kata Sandi" required>
+            <button onclick="checkPassword()">Masuk</button>
+            <p id="error-message" style="color: red; margin-top: 10px; display: none;">Salah... Tolol...</p>
+        </div>
+    </div>
+
+    <div id="main-content">
+        
+        <div class="sidebar">
+            
+            <a href="inventaris.html" target="main-iframe" class="nav-icon active" title="Inventaris">
+                <i class="fas fa-book"></i> 
+            </a>
+
+            <a href="lokasi.html" target="main-iframe" class="nav-icon" title="Lokasi">
+                <i class="fas fa-warehouse"></i>
+            </a>
+            
+        </div>
+
+        <div class="content-area">
+            <iframe id="main-iframe" name="main-iframe" src="inventaris.html">
+                <p>Browser Anda tidak mendukung iframe.</p>
+            </iframe>
+        </div>
+        
+    </div>
+    
+    <script>
+        const CORRECT_PASSWORD = "321321";
+
+        function checkPassword() {
+            const input = document.getElementById('password-input').value;
+            const loginPage = document.getElementById('login-page');
+            const mainContent = document.getElementById('main-content');
+            const errorMsg = document.getElementById('error-message');
+
+            if (input === CORRECT_PASSWORD) {
+                // Sembunyikan halaman login dan tampilkan konten utama
+                loginPage.style.display = 'none';
+                mainContent.style.display = 'flex';
+            } else {
+                // Tampilkan pesan error
+                errorMsg.style.display = 'block';
+                document.getElementById('password-input').value = ''; 
+            }
+        }
+        
+        // Logika untuk mengelola status 'active' pada ikon navigasi dan Enter key
+        document.addEventListener('DOMContentLoaded', () => {
+            const icons = document.querySelectorAll('.nav-icon');
+
+            icons.forEach(icon => {
+                icon.addEventListener('click', function(event) {
+                    icons.forEach(i => i.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+            
+            document.getElementById('password-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    checkPassword();
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>
